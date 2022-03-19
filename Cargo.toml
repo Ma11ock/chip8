@@ -1,0 +1,12 @@
+[package]
+name = "chip8"
+version = "0.1.0"
+authors = ["Ryan Jeffrey <ryan@ryanmj.xyz>"]
+license = "AGPL-3.0"
+description = "Chip8 Emulator"
+homepage = "https://github.com/Ma11ock/chip8"
+keywords = ["emulator", "chip8", "games"]
+publish = false
+[dependencies]
+[dependencies.sdl2]
+version = "0.35"
