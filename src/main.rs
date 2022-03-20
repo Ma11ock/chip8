@@ -2,6 +2,7 @@ extern crate sdl2;
 
 use std::env;
 use std::fs;
+use rand::Rng;
 
 // Includes all data needed by the interpreter.
 #[derive(Copy, Clone)]
@@ -22,6 +23,8 @@ struct InterpreterData {
     sound_timer: u8,
     // Memory.
     mem: [u8; 4096],
+    // RNG.
+    rng: ThreadRng,
 }
 
 impl InterpreterData {
@@ -33,7 +36,9 @@ impl InterpreterData {
                stack: [0; 16],
                delay_timer: 0,
                sound_timer: 0,
-               mem: [0; 4096] }
+               mem: [0; 4096],
+               rng: rand::thread_rng(),
+        }
     }
 
     fn pop_stack(&mut self) -> u16 {
@@ -219,6 +224,46 @@ fn emulate(file: &Vec<u16>) -> Result<(), String> {
                     _ => return Err(invalid_instruction_message(i, cur_instruction)),
                 }
                 emu_state.increment_pc(1)
+            },
+            9 => {
+                if emu_state.get_register(get_third_nibble(cur_instruction)) !=
+                    emu_state.get_register(get_second_nibble(cur_instruction)) {
+                        emu_state.increment_pc(2)
+                    }
+                emu_state.increment_pc(1)
+            },
+            0xa => {
+                emu_state.i = get_last_3_nibbles(cur_instruction);
+                emu_state.increment_pc(1)
+            },
+            0xb => {
+                get_last_3_nibbles(cur_instruction) + emu_state.get_register(0)
+            },
+            0xc => {
+                let rng: u8 = emu_state.rng.gen();
+                emu_state.v[get_third_nibble() as usize] = rng & get_last_2_nibbles();
+                emu_state.increment_pc(1)
+            },
+            0xd => {
+                // TODO draw
+                emu_state.increment_pc(1)
+            },
+            0xe => {
+                // TODO keydown
+                emu_state.increment_pc(1)
+            },
+            0xf => {
+                match get_last_2_nibbles(cur_instruction) {
+                    0x07 => {
+                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
+                            emu_state.delay_timer;
+                        emu_state.increment_pc(1)
+                    },
+                    0x0a => {
+                        
+                    },
+                    _ => return Err(invalid_instruction_message(i, cur_instruction)),
+                }
             },
             // Load bottom byte into V[third nibble].
             _ => return Err(invalid_instruction_message(i, cur_instruction)),
