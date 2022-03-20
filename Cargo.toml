@@ -8,5 +8,6 @@ homepage = "https://github.com/Ma11ock/chip8"
 keywords = ["emulator", "chip8", "games"]
 publish = false
 [dependencies]
+rand = "0.8"
 [dependencies.sdl2]
 version = "0.35"
