@@ -24,9 +24,17 @@ struct InterpreterData {
 
 impl InterpreterData {
     fn pop_stack(&mut self) -> u16 {
-        self.pc = self.stack[self.sp as usize];
         self.sp -= 1;
-        self.pc
+        self.stack[self.sp as usize]
+    }
+
+    fn push_stack(&mut self) {
+        self.sp += 1;
+        self.stack[self.sp] = self.pc;
+    }
+
+    fn get_register(&self, reg: u8) -> u8 {
+        self.v[reg]
     }
 }
 
@@ -36,27 +44,89 @@ union Memory {
     data: InterpreterData,
 }
 
+fn get_last_3_nibbles(n: u16) {
+    n & 0x0FFFu16
+}
+
+fn get_last_2_nibbles(n: u16) {
+    n & 0x00FFu16
+}
+
+fn get_third_nibble(n: u16) {
+    n & 0x0F00
+}
+
+fn get_second_nibble(n: u16) {
+    n & 0x00F0
+}
+
 fn emulate(file: &Vec<u16>) -> Result<(), String> {
     let mut emu_state = Memory{ mem: [0u8; 4096] };
+    fn increment_pc(n: Option<u16>) -> u16 {
+        emu_state.data.pc + n.unwrap_or(1)
+    }
     // Read the file.
     for i in 0..file.len() {
         // Check first nibble
-        match file[i] >> 12 {
+        let new_pc = match file[i] >> 12 {
             0 => {
                 if file[i + 1] == 0xE0 {
                     // Clear the display.
                     // TODO 
+                    increment_pc(None)
                 } else if file[i + 1] == 0xEE {
                     // Set PC to to stack[sp], decrement sp.
-                    unsafe { emu_state.data.pop_stack() };
+                    unsafe { emu_state.data.pop_stack() }
                 }
             },
             // Set PC to bottom three nibbles.
             1 => {
-
+                unsafe { get_last_3_nibbles(file[i]) }
             },
+            // Function call at bottom three nibbles.
             2 => {
-                
+                unsafe {
+                    emu_state.data.push_stack();
+                    get_last_3_nibbles(file[i])
+                }
+            },
+            // Skip next instruction if the bottom byte is equal to the value
+            // in V[first nibble].
+            3 => {
+                let kk = get_last_2_nibbles();
+                unsafe {
+                    if emu_state.data.get_register(get_third_nibble(file[i])) == kk {
+                        increment_pc(Some(2))
+                    } else {
+                        increment_pc(None)
+                    }
+                }
+            },
+            // Skip next instruction if V[third nibble] == bottom byte.
+            4 => {
+                let kk = get_last_2_nibbles();
+                unsafe {
+                    if emu_state.data.get_register(get_third_nibble(file[i])) != kk {
+                        increment_pc(Some(2))
+                    } else {
+                        increment_pc(None)
+                    }
+                }
+            },
+            // If V[third nibble] == V[second nibble] then skip next instruction.
+            5 => {
+                unsafe {
+                    if emu_state.data.get_register(get_third_nibble(file[i])) ==
+                        emu_state.data.get_register(get_second_nibble(file[i])) {
+                            increment_pc(Some(2))
+                        } else {
+                            increment_pc(None)
+                        }
+                }
+            },
+            // Load bottom byte into V[third nibble].
+            6 => {
+                let kk = get_last_2_nibbles();
             },
             _ => return Err(format!("Invalid instruction at position {i}: 0x{:x}.", file[i])),
         }
