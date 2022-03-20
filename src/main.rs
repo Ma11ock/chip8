@@ -50,6 +50,10 @@ impl InterpreterData {
         self.v[reg as usize]
     }
 
+    fn set_register(&mut self, reg: u8, value: u8) {
+        self.v[reg as usize] = value;
+    }
+
     fn increment_pc(&self, amount: u16) -> u16 {
         self.pc + amount
     }
@@ -68,7 +72,11 @@ fn get_third_nibble(n: u16) -> u8 {
 }
 
 fn get_second_nibble(n: u16) -> u8 {
-    ((n & 0x00F0) >> 4) as u8
+    ((n & 0x00F0u16) >> 4) as u8
+}
+
+fn get_first_nibble(n: u16) -> u8 {
+    (n & 0x000fu16) as u8
 }
 
 fn invalid_instruction_message(index: usize, what: u16) -> String {
@@ -131,6 +139,86 @@ fn emulate(file: &Vec<u16>) -> Result<(), String> {
                     } else {
                         emu_state.increment_pc(1)
                     }
+            },
+            // Put the bottom byte into register V[third nibble].
+            6 => {
+                let kk = get_last_2_nibbles(cur_instruction);
+                emu_state.v[get_third_nibble(cur_instruction) as usize] = kk;
+                emu_state.increment_pc(1)
+            },
+            // Adds the bottom byte to the value of V[third nibble], then
+            // stores it there.
+            7 => {
+                let kk = get_last_2_nibbles(cur_instruction);
+                emu_state.v[get_third_nibble(cur_instruction) as usize] = kk;
+                emu_state.increment_pc(1)
+            },
+            8 => {
+                match get_first_nibble(cur_instruction) {
+                    // Bitwise OR V[third nibble] and V[second nibble], store
+                    // result in V[third nibble].
+                    1 => {
+                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
+                            emu_state.get_register(get_third_nibble(cur_instruction)) |
+                            emu_state.get_register(get_second_nibble(cur_instruction));
+                    },
+                    2 => {
+                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
+                            emu_state.get_register(get_third_nibble(cur_instruction)) &
+                            emu_state.get_register(get_second_nibble(cur_instruction));
+                    },
+                    3 => {
+                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
+                            emu_state.get_register(get_third_nibble(cur_instruction)) ^
+                            emu_state.get_register(get_second_nibble(cur_instruction));
+                    },
+                    4 => {
+                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
+                            emu_state.get_register(get_third_nibble(cur_instruction)) +
+                            emu_state.get_register(get_second_nibble(cur_instruction));
+                        if emu_state.get_register(get_third_nibble(cur_instruction)) <
+                            emu_state.get_register(get_second_nibble(cur_instruction)) {
+                            emu_state.v[0xF] = 1;
+                        }
+                    },
+                    5 => {
+                        if emu_state.get_register(get_third_nibble(cur_instruction)) >
+                            emu_state.get_register(get_second_nibble(cur_instruction)) {
+                            emu_state.v[0xF] = 1;
+                        }
+                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
+                            emu_state.get_register(get_third_nibble(cur_instruction)) -
+                            emu_state.get_register(get_second_nibble(cur_instruction));
+                    },
+                    6 => {
+                        if emu_state.get_register(get_second_nibble(cur_instruction)) & 1 == 1 {
+                            emu_state.v[0xF] = 1;
+                        } else {
+                            emu_state.v[get_third_nibble(cur_instruction) as usize] =
+                                emu_state.get_register(get_third_nibble(cur_instruction)) >> 1;
+                        }
+                    },
+                    7 => {
+                        if emu_state.get_register(get_third_nibble(cur_instruction)) <
+                            emu_state.get_register(get_second_nibble(cur_instruction)) {
+                            emu_state.v[0xF] = 1;
+                        }
+                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
+                            emu_state.get_register(get_second_nibble(cur_instruction)) -
+                            emu_state.get_register(get_third_nibble(cur_instruction));
+                        
+                    },
+                    0xe => {
+                        if emu_state.v[get_second_nibble(cur_instruction) as usize] & 0x80 == 0x80 {
+                            emu_state.v[0xF] = 1;
+                        } else {
+                            emu_state.v[get_third_nibble(cur_instruction) as usize] =
+                                emu_state.get_register(get_third_nibble(cur_instruction)) << 1;
+                        }
+                    },
+                    _ => return Err(invalid_instruction_message(i, cur_instruction)),
+                }
+                emu_state.increment_pc(1)
             },
             // Load bottom byte into V[third nibble].
             _ => return Err(invalid_instruction_message(i, cur_instruction)),
