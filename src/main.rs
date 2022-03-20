@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod main_test;
+
 extern crate sdl2;
 extern crate rand;
 
@@ -62,6 +65,7 @@ impl InterpreterData {
     }
 }
 
+#[derive(PartialEq, Eq)]
 enum Instruction {
     Cls,
     Ret,
