@@ -186,7 +186,7 @@ mod instruction_tests {
     }
 
     #[test]
-    fn SneR_test() -> Result<(), InstructionError> {
+    fn sner_test() -> Result<(), InstructionError> {
         assert_eq!(program_to_enum(0x9de0)?, I::SneR(0xd, 0x0e));
         Ok(())
     }
@@ -278,6 +278,45 @@ mod instruction_tests {
     #[test]
     fn ldirm_test() -> Result<(), InstructionError> {
         assert_eq!(program_to_enum(0xfe65)?, I::LdIRM(0xe));
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[path = "main.rs"]
+mod emulate_tests {
+    use super::super::{*};
+    use std::fmt;
+    type I = Instruction;
+
+    impl fmt::Debug for InterpreterData {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            // Instruction to string conversion.
+            write!(f, "v:{:?}, i:{}, pc:{}, sp:{}, stack:{:?}, delay:{}, sound:{}",
+                   self.v, self.i, self.pc, self.sp, self.stack, self.delay_timer,
+                   self.sound_timer)
+        }
+    }
+
+    impl PartialEq for InterpreterData {
+        fn eq(&self, other: &Self) -> bool {
+            self.v == other.v && self.i == other.i && self.pc == other.pc &&
+                self.sp == other.sp && self.stack == other.stack &&
+                self.delay_timer == other.delay_timer &&
+                self.sound_timer == other.sound_timer &&
+                self.mem == other.mem
+        }
+    }
+
+    #[test]
+    fn sys_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate(&vec![I::Sys(0xdef)], &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.pc += 1;
+            e
+        });
         Ok(())
     }
 }
