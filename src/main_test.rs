@@ -7,6 +7,11 @@ mod nibble_tests {
     fn nibble_test() {
         assert_eq!(get_first_nibble(0x8a34u16), 0x4u8);
     }
+
+    #[test]
+    fn msn_test() {
+        assert_eq!(get_fourth_nibble(0xf015u16), 0xf);
+    }
 }
 
 
@@ -21,6 +26,7 @@ mod instruction_tests {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             // Instruction to string conversion.
             write!(f, "{}", match *self {
+                I::Sys(nnn) => format!("Sys {}", nnn),
                 I::Cls => String::from("Cls"),
                 I::Ret => String::from("Ret"),
                 I::Jp(i) => format!("Jp {}", i),
@@ -63,6 +69,12 @@ mod instruction_tests {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "Invalid instruction")
         }
+    }
+
+    #[test]
+    fn sys_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x0defu16)?, I::Sys(0xdef));
+        Ok(())
     }
 
     #[test]
