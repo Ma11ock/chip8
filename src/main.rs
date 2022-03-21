@@ -392,7 +392,7 @@ fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
                     I::Xor(get_third_nibble(instruction), get_second_nibble(instruction))
                 },
                 4 => {
-                    I::Add(get_third_nibble(instruction), get_second_nibble(instruction))
+                    I::AddR(get_third_nibble(instruction), get_second_nibble(instruction))
                 },
                 5 => {
                     I::Sub(get_third_nibble(instruction), get_second_nibble(instruction))

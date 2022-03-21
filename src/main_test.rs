@@ -70,4 +70,202 @@ mod instruction_tests {
         assert_eq!(program_to_enum(0x00e0u16)?, I::Cls);
         Ok(())
     }
+
+    #[test]
+    fn ret_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x00EEu16)?, I::Ret);
+        Ok(())
+    }
+
+    #[test]
+    fn jp_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x1def)?, I::Jp(0xdef));
+        Ok(())
+    }
+
+    #[test]
+    fn call_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x2def)?, I::Call(0xdef));
+        Ok(())
+    }
+
+    #[test]
+    fn se_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x3def)?, I::Se(0xd, 0xef));
+        Ok(())
+    }
+
+    #[test]
+    fn sne_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x4def)?, I::Sne(0xd, 0xef));
+        Ok(())
+    }
+
+    #[test]
+    fn ser_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x5de0)?, I::SeR(0xd, 0x0e));
+        Ok(())
+    }
+
+    #[test]
+    fn ld_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x6def)?, I::Ld(0xd, 0xef));
+        Ok(())
+    }
+
+    #[test]
+    fn add_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x7def)?, I::Add(0xd, 0xef));
+        Ok(())
+    }
+
+    #[test]
+    fn ldr_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x8de0)?, I::LdR(0xd, 0x0e));
+        Ok(())
+    }
+
+    #[test]
+    fn or_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x8de1)?, I::Or(0xd, 0x0e));
+        Ok(())
+    }
+
+    #[test]
+    fn and_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x8de2)?, I::And(0xd, 0x0e));
+        Ok(())
+    }
+
+    #[test]
+    fn xor_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x8de3)?, I::Xor(0xd, 0x0e));
+        Ok(())
+    }
+
+    #[test]
+    fn addr_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x8de4)?, I::AddR(0xd, 0x0e));
+        Ok(())
+    }
+
+    #[test]
+    fn sub_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x8de5)?, I::Sub(0xd, 0x0e));
+        Ok(())
+    }
+
+    #[test]
+    fn shr_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x8de6)?, I::Shr(0xd, 0x0e));
+        Ok(())
+    }
+
+    #[test]
+    fn subn_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x8de7)?, I::SubN(0xd, 0x0e));
+        Ok(())
+    }
+
+    #[test]
+    fn shl_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x8dee)?, I::Shl(0xd, 0x0e));
+        Ok(())
+    }
+
+    #[test]
+    fn SneR_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0x9de0)?, I::SneR(0xd, 0x0e));
+        Ok(())
+    }
+
+    #[test]
+    fn ldi_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xadef)?, I::LdI(0xdef));
+        Ok(())
+    }
+
+    #[test]
+    fn jpi_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xbdef)?, I::JpI(0xdef));
+        Ok(())
+    }
+
+    #[test]
+    fn rnd_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xcdef)?, I::Rnd(0xd, 0xef));
+        Ok(())
+    }
+
+    #[test]
+    fn drw_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xddef)?, I::Drw(0xd, 0xe, 0xf));
+        Ok(())
+    }
+
+    #[test]
+    fn skp_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xedee)?, I::Skp(0xd, 0xe));
+        Ok(())
+    }
+
+    #[test]
+    fn skpn_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xede1)?, I::SkpN(0xd, 0xe));
+        Ok(())
+    }
+
+    #[test]
+    fn ldd_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xfe07)?, I::LdD(0xe));
+        Ok(())
+    }
+
+    #[test]
+    fn ldw_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xfe0a)?, I::LdW(0xe));
+        Ok(())
+    }
+
+    #[test]
+    fn ldsd_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xfe15)?, I::LdSD(0xe));
+        Ok(())
+    }
+
+    #[test]
+    fn lds_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xfe18)?, I::LdS(0xe));
+        Ok(())
+    }
+
+    #[test]
+    fn addi_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xfe1e)?, I::AddI(0xe));
+        Ok(())
+    }
+
+    #[test]
+    fn ldsp_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xfe29)?, I::LdSp(0xe));
+        Ok(())
+    }
+
+    #[test]
+    fn ldbcd_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xfe33)?, I::LdBCD(0xe));
+        Ok(())
+    }
+
+    #[test]
+    fn ldir_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xfe55)?, I::LdIR(0xe));
+        Ok(())
+    }
+
+    #[test]
+    fn ldirm_test() -> Result<(), InstructionError> {
+        assert_eq!(program_to_enum(0xfe65)?, I::LdIRM(0xe));
+        Ok(())
+    }
 }
