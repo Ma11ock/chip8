@@ -74,6 +74,7 @@ impl InterpreterData {
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 enum Instruction {
+    Sys(u16),
     Cls,
     Ret,
     Jp(u16),
@@ -163,6 +164,10 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
 
     // Check first nibble, store result of match in the program counter.
     emu_state.pc = match instruction {
+        I::Sys(..) => {
+            // Ignored on modern interpreters.
+            emu_state.increment_pc(1)
+        },
         I::Cls => {
             // Clear the display.
             // TODO 
@@ -274,7 +279,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
             }
             emu_state.increment_pc(1)
         },
-        I::Shl(x, y) => {
+        I::Shl(x, _) => {
             if emu_state.get_register(x) & 0x80 == 0x80 {
                 emu_state.set_register(0xf, 1);
             } else {
@@ -368,7 +373,7 @@ fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
             match get_last_2_nibbles(instruction) {
                 0xE0 => I::Cls,
                 0xEE => I::Ret,
-                _ => return Err(InstructionError::InvalidInstruction),
+                _ => I::Sys(get_last_3_nibbles(instruction)),
             }
         },
         // Set PC to bottom three nibbles.
