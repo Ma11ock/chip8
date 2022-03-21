@@ -7,9 +7,13 @@ extern crate rand;
 use std::env;
 use std::fs;
 use rand::Rng;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::Color;
+use std::time::Duration;
+use rand::rngs::ThreadRng;
 
 // Includes all data needed by the interpreter.
-#[derive(Copy, Clone)]
 struct InterpreterData {
     // V registers. 16 of them, general purpose, 8 bits.
     v: [u8; 16],
@@ -27,6 +31,8 @@ struct InterpreterData {
     sound_timer: u8,
     // Memory.
     mem: [u8; 4096],
+    // Rng.
+    rng: ThreadRng,
 }
 
 impl InterpreterData {
@@ -39,6 +45,7 @@ impl InterpreterData {
                delay_timer: 0,
                sound_timer: 0,
                mem: [0; 4096],
+               rng: rand::thread_rng(),
         }
     }
 
@@ -65,7 +72,7 @@ impl InterpreterData {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 enum Instruction {
     Cls,
     Ret,
@@ -141,199 +148,222 @@ fn get_first_nibble(n: u16) -> u8 {
     (n & 0x000fu16) as u8
 }
 
+fn get_fourth_nibble(n: u16) -> u8 {
+    ((n & 0xf000u16) >> 12) as u8
+}
+
 fn invalid_instruction_message(index: usize, what: u16) -> String {
     format!("Invalid instruction at position {}: 0x{:x}.", index, what)
 }
 
-fn emulate(file: &Vec<u16>) -> Result<(), String> {
-    let mut emu_state = InterpreterData::new();
+fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
+    type I = Instruction;
 
-    let mut rng = rand::thread_rng();
-    
-    // Read the file.
-    for i in 0..file.len() {
-        let cur_instruction = file[i];
-        // Check first nibble
-        emu_state.pc = match cur_instruction >> 12 {
-            0 => {
-                if get_last_2_nibbles(cur_instruction) == 0xE0 {
-                    // Clear the display.
-                    // TODO 
-                    emu_state.increment_pc(1)
-                } else if get_last_2_nibbles(cur_instruction) == 0xEE {
-                    // Set PC to to stack[sp], decrement sp.
-                    emu_state.pop_stack() 
-                } else {
-                    return Err(invalid_instruction_message(i, cur_instruction));
-                }
-            },
-            // Set PC to bottom three nibbles.
-            1 => {
-                get_last_3_nibbles(cur_instruction) 
-            },
-            // Function call at bottom three nibbles.
-            2 => {
-                emu_state.push_stack();
-                get_last_3_nibbles(cur_instruction)
-            },
-            // Skip next instruction if the bottom byte is equal to the value
-            // in V[first nibble].
-            3 => {
-                let kk = get_last_2_nibbles(cur_instruction) as u8;
-                if emu_state.get_register(get_third_nibble(cur_instruction)) == kk {
+    let instruction = program[emu_state.pc as usize];
+
+    // Check first nibble, store result of match in the program counter.
+    emu_state.pc = match instruction {
+        I::Cls => {
+            // Clear the display.
+            // TODO 
+            emu_state.increment_pc(1)
+        },
+        I::Ret => {
+            // Set PC to to stack[sp], decrement sp.
+            emu_state.pop_stack() 
+        },
+        I::Jp(n) => {
+            n
+        },
+        // Function call at bottom three nibbles.
+        I::Call(n) => {
+            emu_state.push_stack();
+            n
+        },
+        // Skip next instruction if the bottom byte is equal to the value
+        // in V[first nibble].
+        I::Se(x, kk) => {
+            if emu_state.get_register(x) == kk {
+                emu_state.increment_pc(2)
+            } else {
+                emu_state.increment_pc(1)
+            }
+        },
+        // Skip next instruction if V[third nibble] == bottom byte.
+        I::Sne(x, kk) => {
+            if emu_state.get_register(x) != kk {
+                emu_state.increment_pc(2)
+            } else {
+                emu_state.increment_pc(1)
+            }
+        },
+        // If V[third nibble] == V[second nibble] then skip next instruction.
+        I::SeR(x, y) => {
+            if emu_state.get_register(x) == emu_state.get_register(y) {
                     emu_state.increment_pc(2)
                 } else {
                     emu_state.increment_pc(1)
                 }
-            },
-            // Skip next instruction if V[third nibble] == bottom byte.
-            4 => {
-                let kk = get_last_2_nibbles(cur_instruction);
-                if emu_state.get_register(get_third_nibble(cur_instruction)) != kk {
-                    emu_state.increment_pc(2)
-                } else {
-                    emu_state.increment_pc(1)
-                }
-            },
-            // If V[third nibble] == V[second nibble] then skip next instruction.
-            5 => {
-                if emu_state.get_register(get_third_nibble(cur_instruction)) ==
-                    emu_state.get_register(get_second_nibble(cur_instruction)) {
-                        emu_state.increment_pc(2)
-                    } else {
-                        emu_state.increment_pc(1)
-                    }
-            },
-            // Put the bottom byte into register V[third nibble].
-            6 => {
-                let kk = get_last_2_nibbles(cur_instruction);
-                emu_state.v[get_third_nibble(cur_instruction) as usize] = kk;
+        },
+        // Put the bottom byte into register V[third nibble].
+        I::Ld(x, kk) => {
+            emu_state.set_register(x, kk);
+            emu_state.increment_pc(1)
+        },
+        // Adds the bottom byte to the value of V[third nibble], then
+        // stores it there.
+        I::Add(x, kk) => {
+            emu_state.set_register(x, kk);
+            emu_state.increment_pc(1)
+        },
+        I::LdR(x, y) => {
+            emu_state.set_register(x, emu_state.get_register(y));
+            emu_state.increment_pc(1)
+        },
+        I::Or(x, y) => {
+            emu_state.set_register(x,
+                                   emu_state.get_register(x) |
+                                   emu_state.get_register(y));
+            emu_state.increment_pc(1)
+        },
+        I::And(x, y) => {
+            emu_state.set_register(x,
+                                   emu_state.get_register(x) &
+                                   emu_state.get_register(y));
+            emu_state.increment_pc(1)
+        },
+        I::Xor(x, y) => {
+            emu_state.set_register(x,
+                                   emu_state.get_register(x) ^
+                                   emu_state.get_register(y));
+            emu_state.increment_pc(1)
+        },
+        I::AddR(x, y) => {
+            emu_state.set_register(x,
+                                   emu_state.get_register(x) +
+                                   emu_state.get_register(y));
+            if emu_state.get_register(x) < emu_state.get_register(y) {
+                emu_state.set_register(0xf, 1);
+            }
+            emu_state.increment_pc(1)
+        },
+        I::Sub(x, y) => {
+            emu_state.set_register(x,
+                                   emu_state.get_register(x) -
+                                   emu_state.get_register(y));
+            if emu_state.get_register(x) > emu_state.get_register(y) {
+                emu_state.set_register(0xf, 1);
+            }
+            emu_state.increment_pc(1)
+        },
+        I::Shr(x, y) => {
+            if emu_state.get_register(x) & 1 == 1 {
+                emu_state.set_register(x, 1);
+            } else {
+                emu_state.set_register(x, 
+                                       emu_state.get_register(y) >> 1);
+            }
+            emu_state.increment_pc(1)
+        },
+        I::SubN(x, y) => {
+            emu_state.set_register(x,
+                                   emu_state.get_register(y) -
+                                   emu_state.get_register(x));
+            if emu_state.get_register(x) < emu_state.get_register(y) {
+                emu_state.set_register(0xf, 1);
+            }
+            emu_state.increment_pc(1)
+        },
+        I::Shl(x, y) => {
+            if emu_state.get_register(x) & 0x80 == 0x80 {
+                emu_state.set_register(0xf, 1);
+            } else {
+                emu_state.set_register(x, 
+                                       emu_state.get_register(x) << 1);
+            }
+            emu_state.increment_pc(1)
+        },
+        I::SneR(x, y) => {
+            if emu_state.get_register(x) != emu_state.get_register(y) {
+                emu_state.increment_pc(2)
+            } else {
                 emu_state.increment_pc(1)
-            },
-            // Adds the bottom byte to the value of V[third nibble], then
-            // stores it there.
-            7 => {
-                let kk = get_last_2_nibbles(cur_instruction);
-                emu_state.v[get_third_nibble(cur_instruction) as usize] = kk;
-                emu_state.increment_pc(1)
-            },
-            8 => {
-                match get_first_nibble(cur_instruction) {
-                    // Bitwise OR V[third nibble] and V[second nibble], store
-                    // result in V[third nibble].
-                    1 => {
-                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
-                            emu_state.get_register(get_third_nibble(cur_instruction)) |
-                            emu_state.get_register(get_second_nibble(cur_instruction));
-                    },
-                    2 => {
-                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
-                            emu_state.get_register(get_third_nibble(cur_instruction)) &
-                            emu_state.get_register(get_second_nibble(cur_instruction));
-                    },
-                    3 => {
-                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
-                            emu_state.get_register(get_third_nibble(cur_instruction)) ^
-                            emu_state.get_register(get_second_nibble(cur_instruction));
-                    },
-                    4 => {
-                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
-                            emu_state.get_register(get_third_nibble(cur_instruction)) +
-                            emu_state.get_register(get_second_nibble(cur_instruction));
-                        if emu_state.get_register(get_third_nibble(cur_instruction)) <
-                            emu_state.get_register(get_second_nibble(cur_instruction)) {
-                            emu_state.v[0xF] = 1;
-                        }
-                    },
-                    5 => {
-                        if emu_state.get_register(get_third_nibble(cur_instruction)) >
-                            emu_state.get_register(get_second_nibble(cur_instruction)) {
-                            emu_state.v[0xF] = 1;
-                        }
-                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
-                            emu_state.get_register(get_third_nibble(cur_instruction)) -
-                            emu_state.get_register(get_second_nibble(cur_instruction));
-                    },
-                    6 => {
-                        if emu_state.get_register(get_second_nibble(cur_instruction)) & 1 == 1 {
-                            emu_state.v[0xF] = 1;
-                        } else {
-                            emu_state.v[get_third_nibble(cur_instruction) as usize] =
-                                emu_state.get_register(get_third_nibble(cur_instruction)) >> 1;
-                        }
-                    },
-                    7 => {
-                        if emu_state.get_register(get_third_nibble(cur_instruction)) <
-                            emu_state.get_register(get_second_nibble(cur_instruction)) {
-                            emu_state.v[0xF] = 1;
-                        }
-                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
-                            emu_state.get_register(get_second_nibble(cur_instruction)) -
-                            emu_state.get_register(get_third_nibble(cur_instruction));
-                        
-                    },
-                    0xe => {
-                        if emu_state.v[get_second_nibble(cur_instruction) as usize] & 0x80 == 0x80 {
-                            emu_state.v[0xF] = 1;
-                        } else {
-                            emu_state.v[get_third_nibble(cur_instruction) as usize] =
-                                emu_state.get_register(get_third_nibble(cur_instruction)) << 1;
-                        }
-                    },
-                    _ => return Err(invalid_instruction_message(i, cur_instruction)),
-                }
-                emu_state.increment_pc(1)
-            },
-            9 => {
-                if emu_state.get_register(get_third_nibble(cur_instruction)) !=
-                    emu_state.get_register(get_second_nibble(cur_instruction)) {
-                        //emu_state.increment_pc(2)
-                        // TODO fix
-                    }
-                emu_state.increment_pc(1)
-            },
-            0xa => {
-                emu_state.i = get_last_3_nibbles(cur_instruction);
-                emu_state.increment_pc(1)
-            },
-            0xb => {
-                get_last_3_nibbles(cur_instruction) + emu_state.get_register(0) as u16
-            },
-            0xc => {
-                emu_state.v[get_third_nibble(cur_instruction) as usize] =
-                    rng.gen::<u8>() & get_last_2_nibbles(cur_instruction);
-                emu_state.increment_pc(1)
-            },
-            0xd => {
-                // TODO draw
-                emu_state.increment_pc(1)
-            },
-            0xe => {
-                // TODO keydown
-                emu_state.increment_pc(1)
-            },
-            0xf => {
-                match get_last_2_nibbles(cur_instruction) {
-                    0x07 => {
-                        emu_state.v[get_third_nibble(cur_instruction) as usize] =
-                            emu_state.delay_timer;
-                        emu_state.increment_pc(1)
-                    },
-                    _ => return Err(invalid_instruction_message(i, cur_instruction)),
-                }
-            },
-            // Load bottom byte into V[third nibble].
-            _ => return Err(invalid_instruction_message(i, cur_instruction)),
-        }
-    }
-    Ok(())
+            }
+        },
+        I::LdI(nnn) => {
+            emu_state.i = nnn;
+            emu_state.increment_pc(1)
+        },
+        I::JpI(nnn) => {
+            nnn + emu_state.get_register(0) as u16
+        },
+        I::Rnd(x, kk) => {
+            let rn = emu_state.rng.gen::<u8>();
+            emu_state.set_register(x, 
+                                   rn & kk);
+            emu_state.increment_pc(1)
+        },
+        I::Drw(..) => {
+            // TODO draw
+            emu_state.increment_pc(1)
+        },
+        I::Skp(..) => {
+            // TODO keydown
+            emu_state.increment_pc(1)
+        },
+        I::SkpN(..) => {
+            emu_state.increment_pc(1)
+        },
+        I::LdD(x) => {
+            emu_state.set_register(x, emu_state.delay_timer);
+            emu_state.increment_pc(1)
+        },
+        I::LdW(_) => {
+            // TODO
+            emu_state.increment_pc(1)
+        },
+        I::LdSD(x) => {
+            emu_state.delay_timer = emu_state.get_register(x);
+            emu_state.increment_pc(1)
+        },
+        I::LdS(x) => {
+            emu_state.sound_timer = emu_state.get_register(x);
+            emu_state.increment_pc(1)
+        },
+        I::AddI(x) => {
+            emu_state.i = emu_state.i + emu_state.get_register(x) as u16;
+            emu_state.increment_pc(1)
+        },
+        I::LdSp(x) => {
+            emu_state.i = emu_state.get_register(x) as u16;
+            emu_state.increment_pc(1)
+        },
+        I::LdBCD(_) => {
+            // TODO
+            emu_state.increment_pc(1)
+        },
+        I::LdIR(x) => {
+            for i in 0..=(x as u16) {
+                emu_state.mem[(emu_state.i + i) as usize] =
+                    emu_state.get_register(x + i as u8);
+            }
+            emu_state.increment_pc(1)
+        },
+        I::LdIRM(x) => {
+            for i in 0..=(x as u16) {
+                emu_state.set_register(x + 1 as u8,
+                                       emu_state.mem[(emu_state.i + i) as usize]);
+            }
+            emu_state.increment_pc(1)
+        },
+    };
 }
 
 // TODO replace error message with other type, not int.
 // Maybe return an invalid argument.
 fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
     type I = Instruction;
-    Ok(match instruction >> 12 {
+    Ok(match get_fourth_nibble(instruction) {
         0 => {
             match get_last_2_nibbles(instruction) {
                 0xE0 => I::Cls,
@@ -519,23 +549,55 @@ fn convert_bin_format(bytes: &[u8]) -> Result<Vec<u16>, String> {
     Ok(result)
 }
 
-fn main() -> Result<(), String> {
+fn get_program() -> Result<Vec<Instruction>, String>  {
     let game_file: String = get_bin_file();
     println!("Opening binary file {}.", game_file);
 
-    let raw_program = match fs::read(game_file) {
-        Ok(p) => p,
-        Err(e) => return Err(e.to_string()),
-    };
+    match fs::read(game_file) {
+        Ok(raw_p) => convert_program(&convert_bin_format(&raw_p)?),
+        Err(raw_e) => return Err(raw_e.to_string()),
+    }
+}
 
-    let program = match convert_bin_format(&raw_program) {
-        Ok(p) => p,
-        Err(e) => return Err(e),
-    };
+fn main() -> Result<(), String> {
 
-    match emulate(&program) {
-        Err(e) => return Err(e),
-        Ok(_) => {},
+    let program = get_program()?;
+
+    let sdl_context = sdl2::init()?;
+    let video_subsystem = sdl_context.video()?;
+
+    let window = video_subsystem
+        .window("Chip8", 800, 600)
+        .position_centered()
+        .opengl()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
+    canvas.present();
+    let mut event_pump = sdl_context.event_pump()?;
+    let mut emu_state = InterpreterData::new();
+
+    'running: loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => break 'running,
+                _ => {}
+            }
+        }
+
+        // TODO fix emulate call, need to handle program counter.
+        emulate(&program, &mut emu_state);
+
+        canvas.clear();
+        canvas.present();
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
     }
 
     Ok(())
