@@ -257,39 +257,36 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
             emu_state.increment_pc(1)
         },
         I::Sub(x, y) => {
-            emu_state.set_register(x,
-                                   emu_state.get_register(x) -
-                                   emu_state.get_register(y));
             if emu_state.get_register(x) > emu_state.get_register(y) {
                 emu_state.set_register(0xf, 1);
             }
+            emu_state.set_register(x,
+                                   emu_state.get_register(x) -
+                                   emu_state.get_register(y));
             emu_state.increment_pc(1)
         },
         I::Shr(x, y) => {
-            if emu_state.get_register(x) & 1 == 1 {
-                emu_state.set_register(x, 1);
-            } else {
-                emu_state.set_register(x, 
-                                       emu_state.get_register(y) >> 1);
+            if emu_state.get_register(y) & 1 == 1 {
+                emu_state.set_register(0xf, 1);
             }
+            emu_state.set_register(x,  emu_state.get_register(y) >> 1);
             emu_state.increment_pc(1)
         },
         I::SubN(x, y) => {
-            emu_state.set_register(x,
-                                   emu_state.get_register(y) -
-                                   emu_state.get_register(x));
             if emu_state.get_register(x) < emu_state.get_register(y) {
                 emu_state.set_register(0xf, 1);
             }
+            emu_state.set_register(x,
+                                   emu_state.get_register(y) -
+                                   emu_state.get_register(x));
             emu_state.increment_pc(1)
         },
-        I::Shl(x, _) => {
-            if emu_state.get_register(x) & 0x80 == 0x80 {
+        I::Shl(x, y) => {
+            if emu_state.get_register(y) & 0x80 != 0 {
                 emu_state.set_register(0xf, 1);
-            } else {
-                emu_state.set_register(x, 
-                                       emu_state.get_register(x) << 1);
             }
+            emu_state.set_register(x,
+                                   emu_state.get_register(y) << 1);
             emu_state.increment_pc(1)
         },
         I::SneR(x, y) => {
