@@ -1,3 +1,6 @@
+#![allow(arithmetic_overflow)]
+
+
 #[cfg(test)]
 #[path = "main.rs"]
 mod nibble_tests {
@@ -315,6 +318,255 @@ mod emulate_tests {
         assert_eq!(emu_state, {
             let mut e = InterpreterData::new();
             e.pc += 1;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn cls_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate(&vec![I::Cls], &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.pc += 1;
+            e
+        });
+        Ok(())
+    }
+    
+    #[test]
+    fn call_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate(&vec![I::Call(0xdef)], &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.pc = 0xdef;
+            e.sp += 1;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn ret_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Call(0x1), I::Ret], &mut emu_state);
+        assert_eq!(emu_state, InterpreterData::new());
+        Ok(())
+    }
+
+    #[test]
+    fn jp_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate(&vec![I::Jp(0xdef)], &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.pc = 0xdef;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn se_test_neq() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 2), I::Se(0, 1)], &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 2;
+            e.pc = 2;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn se_test_eq() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 2), I::Se(0, 2)], &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 2;
+            e.pc = 3;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn sne_test_neq() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 2), I::Sne(0, 1)], &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 2;
+            e.pc = 3;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn sne_test_eq() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 2), I::Sne(0, 2)], &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 2;
+            e.pc = 2;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn ser_test_neq() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 2), I::Ld(1, 1), I::SeR(0, 1)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 2;
+            e.v[1] = 1;
+            e.pc = 3;
+            e
+        });
+        Ok(())
+    }
+
+    // Test with two registers that have the same value, should skip
+    // 3rd instruction.
+    #[test]
+    fn ser_test_eq() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 1), I::Ld(1, 1), I::SeR(0, 1)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 1;
+            e.v[1] = 1;
+            e.pc = 4;
+            e
+        });
+        Ok(())
+    }
+
+    // Test with two registers that have the same value, should skip
+    // 3rd instruction.
+    #[test]
+    fn ld_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 1)], &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 1;
+            e.pc = 1;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn add_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 1), I::Add(0, 0xde)], &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 1 + 0xde;
+            e.pc = 2;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn ldr_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 1), I::LdR(1, 0)], &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 1;
+            e.v[1] = 1;
+            e.pc = 2;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn or_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 0xbe), I::Ld(1, 0xde), I::Or(0, 1)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 0xde | 0xbe;
+            e.v[1] = 0xde;
+            e.pc = 3;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn and_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 0xbe), I::Ld(1, 0xde), I::And(0, 1)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 0xde & 0xbe;
+            e.v[1] = 0xde;
+            e.pc = 3;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn xor_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 0xbe), I::Ld(1, 0xde), I::Xor(0, 1)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 0xde ^ 0xbe;
+            e.v[1] = 0xde;
+            e.pc = 3;
+            e
+        });
+        Ok(())
+    }
+
+    // AddR with carry.
+    #[test]
+    fn addr_test_carry() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 0xbe), I::Ld(1, 0xde), I::AddR(0, 1)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 0xde + 0xbe;
+            e.v[1] = 0xde;
+            e.v[0xf] = 1;
+            e.pc = 3;
+            e
+        });
+        Ok(())
+    }
+
+    // AddR with without carry.
+    #[test]
+    fn addr_test_no_carry() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 0xbe), I::Ld(1, 1), I::AddR(0, 1)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 0xbe + 1;
+            e.v[1] = 1;
+            e.pc = 3;
             e
         });
         Ok(())

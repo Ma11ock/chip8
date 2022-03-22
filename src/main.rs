@@ -13,6 +13,8 @@ use sdl2::pixels::Color;
 use std::time::Duration;
 use rand::rngs::ThreadRng;
 
+#[allow(arithmetic_overflow)]
+
 // Includes all data needed by the interpreter.
 struct InterpreterData {
     // V registers. 16 of them, general purpose, 8 bits.
@@ -49,9 +51,11 @@ impl InterpreterData {
         }
     }
 
+    // TODO pop_stack and push_stack prolly wrong.
     fn pop_stack(&mut self) -> u16 {
+        let pc = self.stack[self.sp as usize];
         self.sp -= 1;
-        self.stack[self.sp as usize]
+        pc
     }
 
     fn push_stack(&mut self) {
@@ -177,13 +181,13 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
             // Set PC to to stack[sp], decrement sp.
             emu_state.pop_stack() 
         },
-        I::Jp(n) => {
-            n
+        I::Jp(nnn) => {
+            nnn
         },
         // Function call at bottom three nibbles.
-        I::Call(n) => {
+        I::Call(nnn) => {
             emu_state.push_stack();
-            n
+            nnn
         },
         // Skip next instruction if the bottom byte is equal to the value
         // in V[first nibble].
@@ -218,7 +222,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
         // Adds the bottom byte to the value of V[third nibble], then
         // stores it there.
         I::Add(x, kk) => {
-            emu_state.set_register(x, kk);
+            emu_state.set_register(x, emu_state.get_register(0) + kk);
             emu_state.increment_pc(1)
         },
         I::LdR(x, y) => {
@@ -364,8 +368,12 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
     };
 }
 
-// TODO replace error message with other type, not int.
-// Maybe return an invalid argument.
+fn emulate_program(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
+    for _ in program {
+        emulate(&program, emu_state);
+    }
+}
+
 fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
     type I = Instruction;
     Ok(match get_fourth_nibble(instruction) {
