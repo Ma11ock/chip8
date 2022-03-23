@@ -292,12 +292,31 @@ mod emulate_tests {
     use std::fmt;
     type I = Instruction;
 
+    fn print_screen_int(screen: &[bool; 64]) -> [u8; 64] {
+        let mut result: [u8; 64] = [0; 64];
+        for (i, b) in screen.iter().enumerate() {
+            result[i] = *b as u8;
+        }
+        result
+    }
+
     impl fmt::Debug for InterpreterData {
+        // Write instruction.
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            // Instruction to string conversion.
-            write!(f, "v:{:?}, i:{}, pc:{}, sp:{}, stack:{:?}, delay:{}, sound:{}, mem:{:?}",
-                   self.v, self.i, self.pc, self.sp, self.stack, self.delay_timer,
-                   self.sound_timer, self.mem)
+            write!(f, "v:{:?}, i:{}, pc:{}, sp:{}, stack:{:?}, delay:{}, sound:{}",
+                   self.v, self.i, self.pc, self.sp, self.stack, self.delay_timer, self.sound_timer);
+            // Print the screen.
+            write!(f, "\nscreen:");
+            for s in self.screen {
+                write!(f, "{:?}\n", print_screen_int(&s));
+            }
+            // Print the memory.
+            const STEP: usize = 32;
+            write!(f, "\nmem:");
+            for s in (0..self.mem.len()).step_by(STEP) {
+                write!(f, "{:?}\n", &self.mem[s..s+STEP]);
+            }
+            write!(f, "\n")
         }
     }
 
@@ -678,8 +697,8 @@ mod emulate_tests {
             e.v[1] = 0xad;
             e.v[2] = 0xbe;
             e.v[3] = 0xef;
-            e.v[4] = 0x69;
-            
+            e.v[4] = 0xff;
+
             e.mem[1] = 0xde;
             e.mem[2] = 0xad;
             e.mem[3] = 0xbe;
