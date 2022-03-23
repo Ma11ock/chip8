@@ -304,17 +304,17 @@ mod emulate_tests {
         // Write instruction.
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "v:{:?}, i:{}, pc:{}, sp:{}, stack:{:?}, delay:{}, sound:{}",
-                   self.v, self.i, self.pc, self.sp, self.stack, self.delay_timer, self.sound_timer);
+                   self.v, self.i, self.pc, self.sp, self.stack, self.delay_timer, self.sound_timer)?;
             // Print the screen.
-            write!(f, "\nscreen:");
+            write!(f, "\nscreen:")?;
             for s in self.screen {
-                write!(f, "{:?}\n", print_screen_int(&s));
+                write!(f, "{:?}\n", print_screen_int(&s))?;
             }
             // Print the memory.
             const STEP: usize = 32;
-            write!(f, "\nmem:");
+            write!(f, "\nmem:")?;
             for s in (0..self.mem.len()).step_by(STEP) {
-                write!(f, "{:?}\n", &self.mem[s..s+STEP]);
+                write!(f, "{:?}\n", &self.mem[s..s+STEP])?;
             }
             write!(f, "\n")
         }
@@ -697,7 +697,7 @@ mod emulate_tests {
             e.v[1] = 0xad;
             e.v[2] = 0xbe;
             e.v[3] = 0xef;
-            e.v[4] = 0xff;
+            e.v[4] = 0x69;
 
             e.mem[1] = 0xde;
             e.mem[2] = 0xad;
