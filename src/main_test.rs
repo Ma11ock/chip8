@@ -295,9 +295,9 @@ mod emulate_tests {
     impl fmt::Debug for InterpreterData {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             // Instruction to string conversion.
-            write!(f, "v:{:?}, i:{}, pc:{}, sp:{}, stack:{:?}, delay:{}, sound:{}",
+            write!(f, "v:{:?}, i:{}, pc:{}, sp:{}, stack:{:?}, delay:{}, sound:{}, mem:{:?}",
                    self.v, self.i, self.pc, self.sp, self.stack, self.delay_timer,
-                   self.sound_timer)
+                   self.sound_timer, self.mem)
         }
     }
 
@@ -558,7 +558,7 @@ mod emulate_tests {
 
     // AddR with without carry.
     #[test]
-    fn addr_test_no_carry() -> Result<(), InstructionError> {
+    fn addr_test() -> Result<(), InstructionError> {
         let mut emu_state = InterpreterData::new();
         emulate_program(&vec![I::Ld(0, 0xbe), I::Ld(1, 1), I::AddR(0, 1)],
                         &mut emu_state);
@@ -567,6 +567,126 @@ mod emulate_tests {
             e.v[0] = 0xbe + 1;
             e.v[1] = 1;
             e.pc = 3;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn ldd_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 0xbe), I::LdSD(0), I::LdD(1)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 0xbe;
+            e.delay_timer = 0xbe;
+            e.v[1] = 0xbe;
+            e.pc = 3;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn ldsd_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 0xbe), I::LdSD(0)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 0xbe;
+            e.delay_timer = 0xbe;
+            e.pc = 2;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn lds_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 0xbe), I::LdS(0)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 0xbe;
+            e.sound_timer = 0xbe;
+            e.pc = 2;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn addi_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::LdI(0xdef), I::Ld(0, 0xbe), I::AddI(0)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 0xbe;
+            e.i = 0xdef + 0xbe;
+            e.pc = 3;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn ldir_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emulate_program(&vec![I::Ld(0, 0xde), I::Ld(1, 0xad),
+                              I::Ld(2, 0xbe), I::Ld(3, 0xef), I::Ld(4, 0x69),
+                              I::LdI(0x1), I::LdIR(4)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 0xde;
+            e.v[1] = 0xad;
+            e.v[2] = 0xbe;
+            e.v[3] = 0xef;
+            e.v[4] = 0x69;
+            
+            e.mem[1] = 0xde;
+            e.mem[2] = 0xad;
+            e.mem[3] = 0xbe;
+            e.mem[4] = 0xef;
+            // TODO not sure if inclusive.
+            e.mem[5] = 0x69;
+            e.i = 1;
+            e.pc = 7;
+            e
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn ldirm_test() -> Result<(), InstructionError> {
+        let mut emu_state = InterpreterData::new();
+        emu_state.mem[1] = 0xde;
+        emu_state.mem[2] = 0xad;
+        emu_state.mem[3] = 0xbe;
+        emu_state.mem[4] = 0xef;
+        // TODO not sure if inclusive.
+        emu_state.mem[5] = 0x69;
+        emulate_program(&vec![I::LdI(1), I::LdIRM(4)],
+                        &mut emu_state);
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.v[0] = 0xde;
+            e.v[1] = 0xad;
+            e.v[2] = 0xbe;
+            e.v[3] = 0xef;
+            e.v[4] = 0x69;
+            
+            e.mem[1] = 0xde;
+            e.mem[2] = 0xad;
+            e.mem[3] = 0xbe;
+            e.mem[4] = 0xef;
+            e.mem[5] = 0x69;
+            e.i = 1;
+            e.pc = 2;
             e
         });
         Ok(())

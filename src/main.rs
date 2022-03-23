@@ -341,6 +341,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
             emu_state.increment_pc(1)
         },
         I::LdSp(x) => {
+            // TODO this is wrong.
             emu_state.i = emu_state.get_register(x) as u16;
             emu_state.increment_pc(1)
         },
@@ -351,13 +352,13 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
         I::LdIR(x) => {
             for i in 0..=(x as u16) {
                 emu_state.mem[(emu_state.i + i) as usize] =
-                    emu_state.get_register(x + i as u8);
+                    emu_state.get_register(i as u8);
             }
             emu_state.increment_pc(1)
         },
         I::LdIRM(x) => {
             for i in 0..=(x as u16) {
-                emu_state.set_register(x + 1 as u8,
+                emu_state.set_register(i as u8,
                                        emu_state.mem[(emu_state.i + i) as usize]);
             }
             emu_state.increment_pc(1)
