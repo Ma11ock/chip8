@@ -174,12 +174,12 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
         },
         I::Cls => {
             // Clear the display.
-            // TODO 
+            // TODO
             emu_state.increment_pc(1)
         },
         I::Ret => {
             // Set PC to to stack[sp], decrement sp.
-            emu_state.pop_stack() 
+            emu_state.pop_stack()
         },
         I::Jp(nnn) => {
             nnn
@@ -366,6 +366,8 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
     };
 }
 
+// Run an entire program, exists for unit tests.
+#[cfg(test)]
 fn emulate_program(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
     for _ in program {
         emulate(&program, emu_state);
@@ -580,7 +582,7 @@ fn sdl_keycode_to_internal(kc: Keycode) -> u32 {
         Keycode::U => 0x4,
         Keycode::I => 0x5,
         Keycode::O => 0x6,
-        Keycode::O => 0xD,
+        Keycode::P => 0xD,
 
         Keycode::J => 0x7,
         Keycode::K => 0x8,
@@ -638,7 +640,6 @@ fn main() -> Result<(), String> {
             }
         }
 
-        // TODO fix emulate call, need to handle program counter.
         emulate(&program, &mut emu_state);
 
         canvas.clear();
