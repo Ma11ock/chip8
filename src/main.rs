@@ -15,6 +15,26 @@ use rand::rngs::ThreadRng;
 
 #[allow(arithmetic_overflow)]
 
+// From https://austinmorlan.com/posts/chip8_emulator/
+const FONTSET: [u8; 0x10 * 5] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+	0x20, 0x60, 0x20, 0x20, 0x70, // 1
+	0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+	0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+	0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+	0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+	0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+	0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+	0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+	0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+	0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+	0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+	0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+	0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+	0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+	0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+];
+
 // Includes all data needed by the interpreter.
 struct InterpreterData {
     // V registers. 16 of them, general purpose, 8 bits.
@@ -305,7 +325,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
         },
         I::Rnd(x, kk) => {
             let rn = emu_state.rng.gen::<u8>();
-            emu_state.set_register(x, 
+            emu_state.set_register(x,
                                    rn & kk);
             emu_state.increment_pc(1)
         },
@@ -341,12 +361,18 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
             emu_state.increment_pc(1)
         },
         I::LdSp(x) => {
-            // TODO this is wrong.
-            emu_state.i = emu_state.get_register(x) as u16;
+            emu_state.i = 5 * emu_state.get_register(x) as u16;
             emu_state.increment_pc(1)
         },
-        I::LdBCD(_) => {
-            // TODO
+        I::LdBCD(x) => {
+            let n = emu_state.get_register(x);
+            let h = (n / 100) % 10;
+            let t = (n / 10) % 10;
+            let u = n % 10;
+            let i = emu_state.i as usize;
+            emu_state.mem[i] = 5 * h;
+            emu_state.mem[i + 1] = 5 * t;
+            emu_state.mem[i + 2] = 5 * u;
             emu_state.increment_pc(1)
         },
         I::LdIR(x) => {
@@ -552,9 +578,9 @@ fn convert_bin_format(bytes: &[u8]) -> Result<Vec<u16>, String> {
 
     for i in (0..bytes.len()).step_by(2) {
         if cfg!(target_endian = "big") {
-            result.push(bytes[i] as u16 | (bytes[i + 1] as u16) << 8); 
+            result.push(bytes[i] as u16 | (bytes[i + 1] as u16) << 8);
         } else {
-            result.push((bytes[i] as u16) << 8 | bytes[i + 1] as u16); 
+            result.push((bytes[i] as u16) << 8 | bytes[i + 1] as u16);
         }
     }
 
@@ -619,6 +645,11 @@ fn main() -> Result<(), String> {
     let mut emu_state = InterpreterData::new();
 
     let mut cur_pressed_keys = [false; 0xf];
+
+    // Load the font into memory.
+    for (i, b) in FONTSET.iter().enumerate() {
+        emu_state.mem[i] = *b;
+    }
 
     'running: loop {
         for event in event_pump.poll_iter() {
