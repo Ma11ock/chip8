@@ -10,10 +10,19 @@ use rand::Rng;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
+use sdl2::render::Canvas;
+use sdl2::surface::Surface;
+use sdl2::rect::Rect;
 use std::time::Duration;
 use rand::rngs::ThreadRng;
 
 #[allow(arithmetic_overflow)]
+
+const WIN_WIDTH: u32 = 800;
+const WIN_HEIGHT: u32 = 400;
+
+const NUM_ROWS: usize = 32;
+const NUM_COLS: usize = 64;
 
 // From http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#dispcoords
 const FONTSET: [u8; 0x10 * 5] = [
@@ -54,7 +63,7 @@ struct InterpreterData {
     // Memory.
     mem: [u8; 4096],
     // The screen.
-    screen: [[bool; 32]; 64],
+    screen: [[bool; NUM_ROWS]; NUM_COLS],
     // Rng.
     rng: ThreadRng,
 }
@@ -70,7 +79,7 @@ impl InterpreterData {
             delay_timer: 0,
             sound_timer: 0,
             mem: [0; 4096],
-            screen: [[false; 32]; 64],
+            screen: [[false; NUM_ROWS]; NUM_COLS],
             rng: rand::thread_rng(),
         }
     }
@@ -340,8 +349,8 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
             for i in 0..(n as usize) {
                 let sb = emu_state.mem[emu_state.i as usize + i];
                 for j in 0..8 {
-                    let xj = (emu_state.get_register(x) as usize + j) % 64;
-                    let yi = (emu_state.get_register(y) as usize + i) % 32;
+                    let xj = (emu_state.get_register(x) as usize + j) % NUM_COLS;
+                    let yi = (emu_state.get_register(y) as usize + i) % NUM_ROWS;
                     let bit = sb & (1 << j);
                     if bit != 0 {
                         if emu_state.screen[xj][yi] &&
@@ -620,6 +629,32 @@ fn get_program() -> Result<Vec<Instruction>, String>  {
     }
 }
 
+// Draw the emulator state to the SDL screen.
+fn draw_screen(emu_state: &InterpreterData, canvas: &mut Canvas<Surface>) {
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
+
+    let mut draw_cell = Rect::new(0, 0, WIN_WIDTH / NUM_ROWS as u32,
+                                  WIN_HEIGHT / NUM_COLS as u32);
+
+    for i in 0..NUM_ROWS {
+        for j in 0..NUM_COLS {
+            draw_cell.x = (i * (WIN_WIDTH as usize / NUM_ROWS)) as i32;
+            draw_cell.y = (j * (WIN_HEIGHT as usize / NUM_COLS)) as i32;
+
+            if emu_state.screen[i][j] {
+                canvas.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
+            } else {
+                canvas.set_draw_color(Color::RGB(0, 0, 0));
+            }
+
+            canvas.fill_rect(draw_cell);
+        }
+    }
+
+    canvas.present();
+}
+
 // Sdl->internal Chip8 format. Returns 0xdeadbeef on error.
 fn sdl_keycode_to_internal(kc: Keycode) -> u32 {
     match kc {
@@ -653,7 +688,7 @@ fn main() -> Result<(), String> {
     let video_subsystem = sdl_context.video()?;
 
     let window = video_subsystem
-        .window("Chip8", 800, 600)
+        .window("Chip8", WIN_WIDTH, WIN_HEIGHT)
         .position_centered()
         .opengl()
         .build()
@@ -695,8 +730,6 @@ fn main() -> Result<(), String> {
 
         emulate(&program, &mut emu_state);
 
-        canvas.clear();
-        canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
     }
 
