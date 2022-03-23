@@ -527,7 +527,6 @@ fn convert_program(data: &Vec<u16>) -> Result<Vec<Instruction>, String> {
     Ok(result)
 }
 
-
 fn get_bin_file() -> String {
     const DEFAULT_FILE: &str = "game.bin";
     let args = env::args().collect::<Vec<String>>();
@@ -570,6 +569,32 @@ fn get_program() -> Result<Vec<Instruction>, String>  {
     }
 }
 
+// Sdl->internal Chip8 format. Returns 0xdeadbeef on error.
+fn sdl_keycode_to_internal(kc: Keycode) -> u32 {
+    match kc {
+        Keycode::Num7 => 0x1,
+        Keycode::Num8 => 0x2,
+        Keycode::Num9 => 0x3,
+        Keycode::Num0 => 0xC,
+
+        Keycode::U => 0x4,
+        Keycode::I => 0x5,
+        Keycode::O => 0x6,
+        Keycode::O => 0xD,
+
+        Keycode::J => 0x7,
+        Keycode::K => 0x8,
+        Keycode::L => 0x9,
+        Keycode::Semicolon => 0xE,
+
+        Keycode::N => 0xa,
+        Keycode::M => 0x0,
+        Keycode::Less => 0xb,
+        Keycode::Greater => 0xf,
+        _ => 0xdeadbeef,
+    }
+}
+
 fn main() -> Result<(), String> {
 
     let program = get_program()?;
@@ -591,14 +616,24 @@ fn main() -> Result<(), String> {
     let mut event_pump = sdl_context.event_pump()?;
     let mut emu_state = InterpreterData::new();
 
+    let mut cur_pressed_keys = [false; 0xf];
+
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => break 'running,
+                Event::Quit {..} => { break 'running; },
+                Event::KeyDown { keycode: Some(kc), .. } => {
+                    let cur_key = sdl_keycode_to_internal(kc);
+                    if  cur_key != 0xdeadbeef {
+                        cur_pressed_keys[cur_key as usize] = true;
+                    }
+                },
+                Event::KeyUp { keycode: Some(kc), .. } => {
+                    let cur_key = sdl_keycode_to_internal(kc);
+                    if  cur_key != 0xdeadbeef {
+                        cur_pressed_keys[cur_key as usize] = false;
+                    }
+                },
                 _ => {}
             }
         }
