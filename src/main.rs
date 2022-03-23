@@ -15,7 +15,7 @@ use rand::rngs::ThreadRng;
 
 #[allow(arithmetic_overflow)]
 
-// From https://austinmorlan.com/posts/chip8_emulator/
+// From http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#dispcoords
 const FONTSET: [u8; 0x10 * 5] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
 	0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -53,21 +53,25 @@ struct InterpreterData {
     sound_timer: u8,
     // Memory.
     mem: [u8; 4096],
+    // The screen.
+    screen: [[bool; 32]; 64],
     // Rng.
     rng: ThreadRng,
 }
 
 impl InterpreterData {
     pub fn new() -> Self {
-        Self { v: [0; 16],
-               i: 0,
-               pc: 0,
-               sp: 0,
-               stack: [0; 16],
-               delay_timer: 0,
-               sound_timer: 0,
-               mem: [0; 4096],
-               rng: rand::thread_rng(),
+        Self {
+            v: [0; 16],
+            i: 0,
+            pc: 0,
+            sp: 0,
+            stack: [0; 16],
+            delay_timer: 0,
+            sound_timer: 0,
+            mem: [0; 4096],
+            screen: [[false; 32]; 64],
+            rng: rand::thread_rng(),
         }
     }
 
@@ -329,8 +333,27 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
                                    rn & kk);
             emu_state.increment_pc(1)
         },
-        I::Drw(..) => {
-            // TODO draw
+        // Display n-byte sprite starting at memory location I at (Vx, Vy),
+        // set VF = collision.
+        I::Drw(x, y, n) => {
+            emu_state.set_register(0xf, 0);
+            for i in 0..(n as usize) {
+                let sb = emu_state.mem[emu_state.i as usize + i];
+                for j in 0..8 {
+                    let xj = (emu_state.get_register(x) as usize + j) % 64;
+                    let yi = (emu_state.get_register(y) as usize + i) % 32;
+                    let bit = sb & (1 << j);
+                    if bit != 0 {
+                        if emu_state.screen[xj][yi] &&
+                            emu_state.get_register(0xf) == 0 {
+                                emu_state.set_register(0xf, 1);
+                        }
+                        emu_state.screen[xj][yi] = true;
+                    } else {
+                        emu_state.screen[xj][yi] = false;
+                    }
+                }
+            }
             emu_state.increment_pc(1)
         },
         I::Skp(..) => {
@@ -624,7 +647,6 @@ fn sdl_keycode_to_internal(kc: Keycode) -> u32 {
 }
 
 fn main() -> Result<(), String> {
-
     let program = get_program()?;
 
     let sdl_context = sdl2::init()?;
