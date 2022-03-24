@@ -85,13 +85,14 @@ impl InterpreterData {
     }
 
     fn pop_stack(&mut self) -> u16 {
+        let r = self.stack[self.sp as usize];
         self.sp -= 1;
-        self.stack[self.sp as usize]
+        r
     }
 
     fn push_stack(&mut self) {
-        self.stack[self.sp as usize] = self.pc;
         self.sp += 1;
+        self.stack[self.sp as usize] = self.pc;
     }
 
     fn get_register(&self, reg: u8) -> u8 {
@@ -348,12 +349,12 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
         // Display n-byte sprite starting at memory location I at (Vx, Vy),
         // set VF = collision.
         I::Drw(x, y, n) => {
-            println!("A thing happened! {n} {} at {},{}", emu_state.i,
+            print!("A thing happened! {n} {} at {},{}:", emu_state.i,
                      emu_state.get_register(x), emu_state.get_register(y));
             emu_state.set_register(0xf, 0);
             for i in 0..(n as usize) {
-                let sb = emu_state.mem
-                    [if emu_state.i >= 0x200 { emu_state.i - 0x200 } else { emu_state.i } as usize + i];
+                let sb = emu_state.mem[emu_state.i as usize + i];
+                print!(", {}", sb);
                 for j in 0..8 {
                     let xj = (emu_state.get_register(x) as usize + j) % NUM_COLS;
                     let yi = (emu_state.get_register(y) as usize + i) % NUM_ROWS;
@@ -362,10 +363,10 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
                                 emu_state.set_register(0xf, 1);
                         }
                         emu_state.screen[xj][yi] = true;
-                        println!("Again");
                     }
                 }
             }
+            println!("");
             emu_state.increment_pc(1)
         },
         I::Skp(x) => {
@@ -412,6 +413,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
             let t = (n / 10) % 10;
             let u = n % 10;
             let i = emu_state.i as usize;
+            println!("Bcding {n}:{h}{t}{u} to {i}");
             emu_state.mem[i] = 5 * h;
             emu_state.mem[i + 1] = 5 * t;
             emu_state.mem[i + 2] = 5 * u;
@@ -425,11 +427,13 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
             emu_state.increment_pc(1)
         },
         I::LdIRM(x) => {
-            println!("Ldirm {}, n: {}", emu_state.i, x);
+            print!("Ldirm {}, n: {}", emu_state.i, x);
             for i in 0..=(x as u16) {
                 emu_state.set_register(i as u8,
                                        emu_state.mem[(emu_state.i + i) as usize]);
+                print!(", {}", emu_state.get_register(i as u8));
             }
+            println!("");
             emu_state.increment_pc(1)
         },
     };
@@ -439,7 +443,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
 #[cfg(test)]
 fn emulate_program(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
     for _ in program {
-        emulate(&program, emu_state);
+        emulate(&program, emu_state, &[false; 0x10]);
     }
 }
 
@@ -630,12 +634,12 @@ fn convert_bin_format(bytes: &[u8]) -> Result<Vec<u16>, String> {
     Ok(result)
 }
 
-fn get_program() -> Result<Vec<Instruction>, String>  {
+fn get_program() -> Result<(Vec<Instruction>, Vec<u8>), String>  {
     let game_file: String = get_bin_file();
     println!("Opening binary file {}.", game_file);
 
     match fs::read(game_file) {
-        Ok(raw_p) => convert_program(&convert_bin_format(&raw_p)?),
+        Ok(raw_p) => Ok((convert_program(&convert_bin_format(&raw_p)?)?, raw_p)),
         Err(raw_e) => return Err(raw_e.to_string()),
     }
 }
@@ -695,7 +699,7 @@ fn sdl_keycode_to_internal(kc: Keycode) -> u32 {
 }
 
 fn main() -> Result<(), String> {
-    let program = get_program()?;
+    let (program, raw_program) = get_program()?;
 
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
@@ -719,6 +723,11 @@ fn main() -> Result<(), String> {
     // Load the font into memory.
     for (i, b) in FONTSET.iter().enumerate() {
         emu_state.mem[i] = *b;
+    }
+
+    // Load the program into memory.
+    for (i, b) in raw_program.iter().enumerate() {
+        emu_state.mem[i + 0x200] = *b;
     }
 
     'running: loop {

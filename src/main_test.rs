@@ -333,7 +333,7 @@ mod emulate_tests {
     #[test]
     fn sys_test() -> Result<(), InstructionError> {
         let mut emu_state = InterpreterData::new();
-        emulate(&vec![I::Sys(0xdef)], &mut emu_state);
+        emulate_program(&vec![I::Sys(0xdef)], &mut emu_state);
         assert_eq!(emu_state, {
             let mut e = InterpreterData::new();
             e.pc += 1;
@@ -345,7 +345,7 @@ mod emulate_tests {
     #[test]
     fn cls_test() -> Result<(), InstructionError> {
         let mut emu_state = InterpreterData::new();
-        emulate(&vec![I::Cls], &mut emu_state);
+        emulate_program(&vec![I::Cls], &mut emu_state);
         assert_eq!(emu_state, {
             let mut e = InterpreterData::new();
             e.pc += 1;
@@ -353,11 +353,11 @@ mod emulate_tests {
         });
         Ok(())
     }
-    
+
     #[test]
     fn call_test() -> Result<(), InstructionError> {
         let mut emu_state = InterpreterData::new();
-        emulate(&vec![I::Call(0xdef)], &mut emu_state);
+        emulate_program(&vec![I::Call(0xdef)], &mut emu_state);
         assert_eq!(emu_state, {
             let mut e = InterpreterData::new();
             e.pc = 0xdef;
@@ -371,14 +371,18 @@ mod emulate_tests {
     fn ret_test() -> Result<(), InstructionError> {
         let mut emu_state = InterpreterData::new();
         emulate_program(&vec![I::Call(0x1), I::Ret], &mut emu_state);
-        assert_eq!(emu_state, InterpreterData::new());
+        assert_eq!(emu_state, {
+            let mut e = InterpreterData::new();
+            e.pc = 1;
+            e
+        });
         Ok(())
     }
 
     #[test]
     fn jp_test() -> Result<(), InstructionError> {
         let mut emu_state = InterpreterData::new();
-        emulate(&vec![I::Jp(0xdef)], &mut emu_state);
+        emulate_program(&vec![I::Jp(0xdef)], &mut emu_state);
         assert_eq!(emu_state, {
             let mut e = InterpreterData::new();
             e.pc = 0xdef;
@@ -666,7 +670,7 @@ mod emulate_tests {
             e.v[2] = 0xbe;
             e.v[3] = 0xef;
             e.v[4] = 0x69;
-            
+
             e.mem[1] = 0xde;
             e.mem[2] = 0xad;
             e.mem[3] = 0xbe;
