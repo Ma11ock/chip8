@@ -53,8 +53,8 @@ mod instruction_tests {
                 I::JpI(i) => format!("JpI {}", i),
                 I::Rnd(i1, i2) => format!("Rnd {} {}", i1, i2),
                 I::Drw(i1, i2, i3) => format!("Rnd {} {} {}", i1, i2, i3),
-                I::Skp(i1, i2) => format!("Skp {} {}", i1, i2),
-                I::SkpN(i1, i2) => format!("SkpN {} {}", i1, i2),
+                I::Skp(i) => format!("Skp {}", i),
+                I::SkpN(i) => format!("SkpN {}", i),
                 I::LdD(i) => format!("LdD {}", i),
                 I::LdW(i) => format!("LdW {}", i),
                 I::LdS(i) => format!("LdS {}", i),
@@ -220,13 +220,13 @@ mod instruction_tests {
 
     #[test]
     fn skp_test() -> Result<(), InstructionError> {
-        assert_eq!(program_to_enum(0xedee)?, I::Skp(0xd, 0xe));
+        assert_eq!(program_to_enum(0xed9e)?, I::Skp(0xd));
         Ok(())
     }
 
     #[test]
     fn skpn_test() -> Result<(), InstructionError> {
-        assert_eq!(program_to_enum(0xede1)?, I::SkpN(0xd, 0xe));
+        assert_eq!(program_to_enum(0xeda1)?, I::SkpN(0xd));
         Ok(())
     }
 

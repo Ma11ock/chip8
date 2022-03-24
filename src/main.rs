@@ -11,7 +11,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::render::Canvas;
-use sdl2::surface::Surface;
+use sdl2::video::Window;
 use sdl2::rect::Rect;
 use std::time::Duration;
 use rand::rngs::ThreadRng;
@@ -141,8 +141,8 @@ enum Instruction {
     JpI(u16),
     Rnd(u8, u8),
     Drw(u8, u8, u8),
-    Skp(u8, u8),
-    SkpN(u8, u8),
+    Skp(u8),
+    SkpN(u8),
     // Load delay time value.
     LdD(u8),
     // Load keypress, halt until key is pressed.
@@ -192,6 +192,10 @@ fn get_fourth_nibble(n: u16) -> u8 {
 
 fn invalid_instruction_message(index: usize, what: u16) -> String {
     format!("Invalid instruction at position {}: 0x{:x}.", index, what)
+}
+
+fn jp_to_instruction_pos(d: u16) -> u16 {
+    (d - 0x200) / 2
 }
 
 fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
@@ -346,14 +350,13 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
         I::Drw(x, y, n) => {
             emu_state.set_register(0xf, 0);
             for i in 0..(n as usize) {
-                let sb = emu_state.mem[emu_state.i as usize + i];
+                let sb = emu_state.mem
+                    [if emu_state.i >= 0x200 { emu_state.i - 0x200 } else { emu_state.i } as usize + i];
                 for j in 0..8 {
                     let xj = (emu_state.get_register(x) as usize + j) % NUM_COLS;
                     let yi = (emu_state.get_register(y) as usize + i) % NUM_ROWS;
-                    let bit = sb & (1 << j);
-                    if bit != 0 {
-                        if emu_state.screen[xj][yi] &&
-                            emu_state.get_register(0xf) == 0 {
+                    if sb & (1 << j) != 0 {
+                        if emu_state.screen[xj][yi] {
                                 emu_state.set_register(0xf, 1);
                         }
                         emu_state.screen[xj][yi] = true;
@@ -364,11 +367,10 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
             }
             emu_state.increment_pc(1)
         },
-        I::Skp(..) => {
-            // TODO keydown
+        I::Skp(x) => {
             emu_state.increment_pc(1)
         },
-        I::SkpN(..) => {
+        I::SkpN(x) => {
             emu_state.increment_pc(1)
         },
         I::LdD(x) => {
@@ -421,7 +423,6 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
             emu_state.increment_pc(1)
         },
     };
-    println!("The new pc is {}", emu_state.pc);
 }
 
 // Run an entire program, exists for unit tests.
@@ -430,10 +431,6 @@ fn emulate_program(program: &Vec<Instruction>, emu_state: &mut InterpreterData) 
     for _ in program {
         emulate(&program, emu_state);
     }
-}
-
-fn jp_to_instruction_pos(d: u16) -> u16 {
-    (d - 0x200) / 2
 }
 
 fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
@@ -537,8 +534,8 @@ fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
         },
         0xe => {
             match get_first_nibble(instruction) {
-                0xe => I::Skp(get_third_nibble(instruction), get_second_nibble(instruction)),
-                0x1 => I::SkpN(get_third_nibble(instruction), get_second_nibble(instruction)),
+                0xe => I::Skp(get_third_nibble(instruction)),
+                0x1 => I::SkpN(get_third_nibble(instruction)),
                 _ => return Err(InstructionError::InvalidInstruction),
             }
         },
@@ -634,29 +631,31 @@ fn get_program() -> Result<Vec<Instruction>, String>  {
 }
 
 // Draw the emulator state to the SDL screen.
-fn draw_screen(emu_state: &InterpreterData, canvas: &mut Canvas<Surface>) {
+fn draw_screen(emu_state: &InterpreterData, canvas: &mut Canvas<Window>) -> Result<(), String> {
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
 
-    let mut draw_cell = Rect::new(0, 0, WIN_WIDTH / NUM_ROWS as u32,
-                                  WIN_HEIGHT / NUM_COLS as u32);
+    let cell_width = WIN_WIDTH / NUM_COLS as u32;
+    let cell_height = WIN_HEIGHT / NUM_ROWS as u32;
+    let mut draw_cell = Rect::new(0, 0, cell_width, cell_height);
 
     for i in 0..NUM_ROWS {
+        draw_cell.y = i as i32 * cell_height as i32;
         for j in 0..NUM_COLS {
-            draw_cell.x = (i * (WIN_WIDTH as usize / NUM_ROWS)) as i32;
-            draw_cell.y = (j * (WIN_HEIGHT as usize / NUM_COLS)) as i32;
+            draw_cell.x = j as i32 * cell_width as i32;
 
-            if emu_state.screen[i][j] {
+            if emu_state.screen[j][i] {
                 canvas.set_draw_color(Color::RGB(0xff, 0xff, 0xff));
             } else {
                 canvas.set_draw_color(Color::RGB(0, 0, 0));
             }
 
-            canvas.fill_rect(draw_cell);
+            canvas.fill_rect(draw_cell)?;
         }
     }
 
     canvas.present();
+    Ok(())
 }
 
 // Sdl->internal Chip8 format. Returns 0xdeadbeef on error.
@@ -733,6 +732,8 @@ fn main() -> Result<(), String> {
         }
 
         emulate(&program, &mut emu_state);
+
+        draw_screen(&emu_state, &mut canvas);
 
         std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
     }
