@@ -358,7 +358,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
                 for j in 0..8 {
                     let xj = (emu_state.get_register(x) as usize + j) % NUM_COLS;
                     let yi = (emu_state.get_register(y) as usize + i) % NUM_ROWS;
-                    if sb & (1 << j) != 0 {
+                    if sb & (0x80 >> j) != 0 {
                         if emu_state.screen[xj][yi] {
                                 emu_state.set_register(0xf, 1);
                         }
