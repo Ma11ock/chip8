@@ -207,7 +207,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
         },
         I::Cls => {
             // Clear the display.
-            // TODO
+            emu_state.screen = [[false; NUM_ROWS]; NUM_COLS];
             emu_state.increment_pc(1)
         },
         I::Ret => {
@@ -338,8 +338,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
         },
         I::Rnd(x, kk) => {
             let rn = emu_state.rng.gen::<u8>();
-            emu_state.set_register(x,
-                                   rn & kk);
+            emu_state.set_register(x, rn & kk);
             emu_state.increment_pc(1)
         },
         // Display n-byte sprite starting at memory location I at (Vx, Vy),
@@ -422,6 +421,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
             emu_state.increment_pc(1)
         },
     };
+    println!("The new pc is {}", emu_state.pc);
 }
 
 // Run an entire program, exists for unit tests.
@@ -430,6 +430,10 @@ fn emulate_program(program: &Vec<Instruction>, emu_state: &mut InterpreterData) 
     for _ in program {
         emulate(&program, emu_state);
     }
+}
+
+fn jp_to_instruction_pos(d: u16) -> u16 {
+    (d - 0x200) / 2
 }
 
 fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
@@ -444,11 +448,11 @@ fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
         },
         // Set PC to bottom three nibbles.
         1 => {
-            I::Jp(get_last_3_nibbles(instruction))
+            I::Jp(jp_to_instruction_pos(get_last_3_nibbles(instruction)))
         },
         // Function call at bottom three nibbles.
         2 => {
-            I::Call(get_last_3_nibbles(instruction))
+            I::Call(jp_to_instruction_pos(get_last_3_nibbles(instruction)))
         },
         // Skip next instruction if the bottom byte is equal to the value
         // in V[first nibble].
@@ -521,7 +525,7 @@ fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
             I::LdI(get_last_3_nibbles(instruction))
         },
         0xb => {
-            I::JpI(get_last_3_nibbles(instruction))
+            I::JpI(jp_to_instruction_pos(get_last_3_nibbles(instruction)))
         },
         0xc => {
             I::Rnd(get_third_nibble(instruction), get_last_2_nibbles(instruction))
@@ -730,7 +734,7 @@ fn main() -> Result<(), String> {
 
         emulate(&program, &mut emu_state);
 
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
+        std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
     }
 
     Ok(())

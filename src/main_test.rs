@@ -94,13 +94,13 @@ mod instruction_tests {
 
     #[test]
     fn jp_test() -> Result<(), InstructionError> {
-        assert_eq!(program_to_enum(0x1def)?, I::Jp(0xdef));
+        assert_eq!(program_to_enum(0x1def)?, I::Jp((0xdef - 0x200) / 2));
         Ok(())
     }
 
     #[test]
     fn call_test() -> Result<(), InstructionError> {
-        assert_eq!(program_to_enum(0x2def)?, I::Call(0xdef));
+        assert_eq!(program_to_enum(0x2def)?, I::Call((0xdef - 0x200) / 2));
         Ok(())
     }
 
@@ -202,7 +202,7 @@ mod instruction_tests {
 
     #[test]
     fn jpi_test() -> Result<(), InstructionError> {
-        assert_eq!(program_to_enum(0xbdef)?, I::JpI(0xdef));
+        assert_eq!(program_to_enum(0xbdef)?, I::JpI((0xdef - 0x200) / 2));
         Ok(())
     }
 
@@ -292,8 +292,8 @@ mod emulate_tests {
     use std::fmt;
     type I = Instruction;
 
-    fn print_screen_int(screen: &[bool; 64]) -> [u8; 64] {
-        let mut result: [u8; 64] = [0; 64];
+    fn print_screen_int(screen: &[bool; 32]) -> [u8; 32] {
+        let mut result: [u8; 32] = [0; 32];
         for (i, b) in screen.iter().enumerate() {
             result[i] = *b as u8;
         }
