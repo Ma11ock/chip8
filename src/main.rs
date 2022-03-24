@@ -84,16 +84,14 @@ impl InterpreterData {
         }
     }
 
-    // TODO pop_stack and push_stack prolly wrong.
     fn pop_stack(&mut self) -> u16 {
-        let pc = self.stack[self.sp as usize];
         self.sp -= 1;
-        pc
+        self.stack[self.sp as usize]
     }
 
     fn push_stack(&mut self) {
-        self.sp += 1;
         self.stack[self.sp as usize] = self.pc;
+        self.sp += 1;
     }
 
     fn get_register(&self, reg: u8) -> u8 {
@@ -198,10 +196,12 @@ fn jp_to_instruction_pos(d: u16) -> u16 {
     (d - 0x200) / 2
 }
 
-fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
+fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
+           cur_pressed_keys: &[bool; 0x10]) {
     type I = Instruction;
 
     let instruction = program[emu_state.pc as usize];
+    println!("It is {}", emu_state.pc);
 
     // Check first nibble, store result of match in the program counter.
     emu_state.pc = match instruction {
@@ -216,7 +216,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
         },
         I::Ret => {
             // Set PC to to stack[sp], decrement sp.
-            emu_state.pop_stack()
+            emu_state.pop_stack() + 1
         },
         I::Jp(nnn) => {
             nnn
@@ -348,6 +348,8 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
         // Display n-byte sprite starting at memory location I at (Vx, Vy),
         // set VF = collision.
         I::Drw(x, y, n) => {
+            println!("A thing happened! {n} {} at {},{}", emu_state.i,
+                     emu_state.get_register(x), emu_state.get_register(y));
             emu_state.set_register(0xf, 0);
             for i in 0..(n as usize) {
                 let sb = emu_state.mem
@@ -360,18 +362,25 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
                                 emu_state.set_register(0xf, 1);
                         }
                         emu_state.screen[xj][yi] = true;
-                    } else {
-                        emu_state.screen[xj][yi] = false;
+                        println!("Again");
                     }
                 }
             }
             emu_state.increment_pc(1)
         },
         I::Skp(x) => {
-            emu_state.increment_pc(1)
+            if cur_pressed_keys[emu_state.get_register(x) as usize] {
+                emu_state.increment_pc(2)
+            } else {
+                emu_state.increment_pc(1)
+            }
         },
         I::SkpN(x) => {
-            emu_state.increment_pc(1)
+            if !cur_pressed_keys[emu_state.get_register(x) as usize] {
+                emu_state.increment_pc(2)
+            } else {
+                emu_state.increment_pc(1)
+            }
         },
         I::LdD(x) => {
             emu_state.set_register(x, emu_state.delay_timer);
@@ -416,6 +425,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
             emu_state.increment_pc(1)
         },
         I::LdIRM(x) => {
+            println!("Ldirm {}, n: {}", emu_state.i, x);
             for i in 0..=(x as u16) {
                 emu_state.set_register(i as u8,
                                        emu_state.mem[(emu_state.i + i) as usize]);
@@ -704,7 +714,7 @@ fn main() -> Result<(), String> {
     let mut event_pump = sdl_context.event_pump()?;
     let mut emu_state = InterpreterData::new();
 
-    let mut cur_pressed_keys = [false; 0xf];
+    let mut cur_pressed_keys = [false; 0x10];
 
     // Load the font into memory.
     for (i, b) in FONTSET.iter().enumerate() {
@@ -731,9 +741,16 @@ fn main() -> Result<(), String> {
             }
         }
 
-        emulate(&program, &mut emu_state);
+        emulate(&program, &mut emu_state, &cur_pressed_keys);
 
-        draw_screen(&emu_state, &mut canvas);
+        if emu_state.delay_timer > 0 {
+            emu_state.delay_timer -= 1;
+        }
+        if emu_state.sound_timer > 0 {
+            emu_state.sound_timer -= 1;
+        }
+
+        draw_screen(&emu_state, &mut canvas)?;
 
         std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
     }
