@@ -1,6 +1,19 @@
+/// Chip 8 emulator.
+/// (C) Ryan Jeffrey <ryan@ryanmj.xyz>, 2022
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at
+// your option) any later version.
+
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 #[cfg(test)]
 mod main_test;
-
 extern crate sdl2;
 extern crate rand;
 
@@ -18,13 +31,18 @@ use rand::rngs::ThreadRng;
 
 #[allow(arithmetic_overflow)]
 
+/// Windows width in pixels.
 const WIN_WIDTH: u32 = 800;
+/// Windows height in pixels.
 const WIN_HEIGHT: u32 = 400;
 
+/// The number of rows on the screen (chip 8 height).
 const NUM_ROWS: usize = 32;
+/// The number of columns on the screen (chip 8 width).
 const NUM_COLS: usize = 64;
 
-// From http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#dispcoords
+/// From http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#dispcoords
+/// The chip 8 font sprites.
 const FONTSET: [u8; 0x10 * 5] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
 	0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -44,33 +62,34 @@ const FONTSET: [u8; 0x10 * 5] = [
 	0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 ];
 
-// Includes all data needed by the interpreter.
+/// Interpreter state.
 struct InterpreterData {
-    // V registers. 16 of them, general purpose, 8 bits.
+    /// V registers. 16 of them, general purpose, 8 bits.
     v: [u8; 16],
-    // I register, 16 bits.
+    /// I register, 16 bits.
     i: u16,
-    // Program counter, 16 bits.
+    /// Program counter, 16 bits.
     pc: u16,
-    // Stack pointer, 16 bits.
+    /// Stack pointer, 16 bits.
     sp: u8,
-    // The call stack, 16 levels of 16 bits each.
+    /// The call stack, 16 levels of 16 bits each.
     stack: [u16; 16],
-    // Delay timer @ 60Hz, 8 bits.
+    /// Delay timer @ 60Hz, 8 bits.
     delay_timer: u8,
-    // Sound timer @ 60Hz, 8 bits.
+    /// Sound timer @ 60Hz, 8 bits.
     sound_timer: u8,
-    // Memory.
+    /// Memory.
     mem: [u8; 4096],
-    // The screen.
+    /// The screen.
     screen: [[bool; NUM_ROWS]; NUM_COLS],
-    // Redraw the screen.
+    /// Redraw the screen flag.
     draw: bool,
-    // Rng.
+    /// Rng.
     rng: ThreadRng,
 }
 
 impl InterpreterData {
+    /// Create a new Interpreter state struct, 0 initialize.
     pub fn new() -> Self {
         Self {
             v: [0; 16],
@@ -87,115 +106,178 @@ impl InterpreterData {
         }
     }
 
+    /// Pop the stack and return the memory address on top of it.
     fn pop_stack(&mut self) -> u16 {
         let r = self.stack[self.sp as usize];
         self.sp -= 1;
         r
     }
 
+    /// Push current memory address to the stack.
     fn push_stack(&mut self) {
         self.sp += 1;
         self.stack[self.sp as usize] = self.pc;
     }
 
+    /// Get the value of register reg.
+    /// # Arguments
+    /// * `reg` The register to return. Valid from 0-0xf.
     fn get_register(&self, reg: u8) -> u8 {
         self.v[reg as usize]
     }
 
+    /// Set the value of register reg.
+    /// # Arguments
+    /// * `reg` The register to set. Valid from 0-0xf.
+    /// * `value` The value to place in the register.
     fn set_register(&mut self, reg: u8, value: u8) {
         self.v[reg as usize] = value;
     }
 
+    /// Add `amount` to the current program counter, return result.
+    /// # Arguments
+    /// * `amount` The amount to add to the program counter.
     fn increment_pc(&self, amount: u16) -> u16 {
         self.pc + amount
     }
 }
 
+/// Chip 8 instruction and their arguments.
 #[derive(PartialEq, Eq, Copy, Clone)]
 enum Instruction {
+    /// Sys, ignored in this emulator.
     Sys(u16),
+    /// Clear the screen.
     Cls,
+    /// Return from the current subroutine, pop the stack.
     Ret,
+    /// Jump to memory address.
     Jp(u16),
+    /// Call subroutine, push to the stack.
     Call(u16),
-    // Skip next instruction if register equals value.
+    /// Skip next instruction if register equals value.
     Se(u8, u8),
+    /// Skip next instruction if register does not equal value.
     Sne(u8, u8),
-    // Skip next instruction if registers are equal.
+    /// Skip next instruction if registers are equal.
     SeR(u8, u8),
-    // Load byte into register.
+    /// Take register and load bottom byte.
     Ld(u8, u8),
+    /// Add register to bottom byte.
     Add(u8, u8),
-    // Load register into other register.
+    /// Load register into other register.
     LdR(u8, u8),
+    /// Bitwise OR registers.
     Or(u8, u8),
+    /// Bitwise And registers.
     And(u8, u8),
+    /// Bitwise Xor registers.
     Xor(u8, u8),
-    // Add first register to second register, store in first register.
+    /// Add first register to second register, store in first register.
     AddR(u8, u8),
+    /// Subtract register to bottom byte.
     Sub(u8, u8),
+    /// Divide register value by 2.
     Shr(u8, u8),
+    /// Subtract second register by first register.
     SubN(u8, u8),
+    /// Multiply register by 2.
     Shl(u8, u8),
+    /// Skip next instruction if two registers do not equal.
     SneR(u8, u8),
+    /// Load value into I register.
     LdI(u16),
-    // Jump to value + I.
+    /// Jump to value + I.
     JpI(u16),
+    /// Place random number AND bottom byte into register.
     Rnd(u8, u8),
+    /// Draw n byte sprite at position gained from first two registers.
     Drw(u8, u8, u8),
+    /// Skip next instruction if key is pressed.
     Skp(u8),
+    /// Skip next instruction if key is not pressed.
     SkpN(u8),
-    // Load delay time value.
+    /// Load the value of the delay timer into register.
     LdD(u8),
-    // Load keypress, halt until key is pressed.
+    /// Load keypress, halt until key is pressed.
     LdW(u8),
-    // Set delay time value.
+    /// Set delay time value.
     LdSD(u8),
-    // Set sound time value.
+    /// Set sound time value.
     LdS(u8),
+    /// Add value of register with I register, store in first register.
     AddI(u8),
-    // Load sprite location from V[x].
+    /// Load sprite location from V[x].
     LdSp(u8),
-    // Store BCD repr of V[x] in I, I + 1, I + 2.
+    /// Store BCD repr of V[x] in I, I + 1, I + 2.
     LdBCD(u8),
-    // Store registers V[0] to V[x] in memory starting at I.
+    /// Store registers V[0] to V[x] in memory starting at I.
     LdIR(u8),
-    // Store memory at I into V[0] to V[x].
+    /// Store memory at I into V[0] to V[x].
     LdIRM(u8),
 }
 
+/// Instruction interpretation error.
 enum InstructionError {
+    /// Instruction interpretation error.
     InvalidInstruction
 }
 
+/// Return the bottom three nibbles from opcode.
+/// # Arguments
+/// * `n` 16 bit opcode.
 fn get_last_3_nibbles(n: u16) -> u16 {
     n & 0x0FFFu16
 }
 
+/// Return the bottom byte from opcode.
+/// # Arguments
+/// * `n` 16 bit opcode.
 fn get_last_2_nibbles(n: u16) -> u8 {
     (n & 0x00FFu16) as u8
 }
 
+
+/// Return the top second nibble from opcode.
+/// # Arguments
+/// * `n` 16 bit opcode.
 fn get_third_nibble(n: u16) -> u8 {
     ((n & 0x0F00u16) >> 8) as u8
 }
 
+/// Return the top third nibble from opcode.
+/// # Arguments
+/// * `n` 16 bit opcode.
 fn get_second_nibble(n: u16) -> u8 {
     ((n & 0x00F0u16) >> 4) as u8
 }
 
+/// Return the bottom nibble from opcode.
+/// # Arguments
+/// * `n` 16 bit opcode.
 fn get_first_nibble(n: u16) -> u8 {
     (n & 0x000fu16) as u8
 }
 
+/// Return the top nibble from opcode.
+/// # Arguments
+/// * `n` 16 bit opcode.
 fn get_fourth_nibble(n: u16) -> u8 {
     ((n & 0xf000u16) >> 12) as u8
 }
 
+/// Return conversion from memory address to Instruction position.
+/// # Arguments
+/// * `n` Memory address.
 fn jp_to_instruction_pos(d: u16) -> u16 {
     (d - 0x200) / 2
 }
 
+/// Emulate chip8 instruction at emu_state's program counter. 
+/// # Arguments
+/// * `program` The chip8 program as Instructions.
+/// * `emu_state` The emulator state to change.
+/// * `cur_pressed_keys` Keypad state.
 fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
            cur_pressed_keys: &[bool; 0x10]) {
     type I = Instruction;
@@ -429,14 +511,21 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
     };
 }
 
-// Run an entire program, exists for unit tests.
 #[cfg(test)]
+/// Run an entire program, exists for unit tests.
+/// # Arguments
+/// * `program` The program to run.
+/// * `emu_state` Emulator state to change.
 fn emulate_program(program: &Vec<Instruction>, emu_state: &mut InterpreterData) {
     for _ in program {
         emulate(&program, emu_state, &[false; 0x10]);
     }
 }
 
+/// Convert raw chip 8 opcode into instruction. Returns InstructionError
+/// if instruction is invalid.
+/// # Arguments
+/// `instruction` Chip 8 opcode.
 fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
     type I = Instruction;
     Ok(match get_fourth_nibble(instruction) {
@@ -581,6 +670,10 @@ fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
     })
 }
 
+/// Convert vector of chip 8 opcodes into vector of instructions. Returns
+/// string on error.
+/// # Arguments 
+/// * `data` Raw chip 8 opcode vector.
 fn convert_program(data: &Vec<u16>) -> Result<Vec<Instruction>, String> {
     // HACK this is a bad design. Not only does it mess with JP and CALL
     // instructions, it also has no way of differentiating sprite/constant
@@ -597,6 +690,8 @@ fn convert_program(data: &Vec<u16>) -> Result<Vec<Instruction>, String> {
     Ok(result)
 }
 
+/// Return the name of the file from command line arguments. If no file was
+/// specified the default to game.bin.
 fn get_bin_file() -> String {
     const DEFAULT_FILE: &str = "game.bin";
     let args = env::args().collect::<Vec<String>>();
@@ -610,6 +705,8 @@ fn get_bin_file() -> String {
     }
 }
 
+/// Convert byte stream into 16 bit opcode array.
+/// Return vector of u16 on success, return string on error.
 fn convert_bin_format(bytes: &[u8]) -> Result<Vec<u16>, String> {
     // Because chip8 instructions are 16 bits its length (in bytes) should be even.
     if bytes.len() % 2 == 1 {
@@ -629,6 +726,8 @@ fn convert_bin_format(bytes: &[u8]) -> Result<Vec<u16>, String> {
     Ok(result)
 }
 
+/// Get the program as a vector of instructions and as a raw byte stream.
+/// Return vectors on success, return string on error.
 fn get_program() -> Result<(Vec<Instruction>, Vec<u8>), String>  {
     let game_file: String = get_bin_file();
     println!("Opening binary file {}.", game_file);
@@ -645,7 +744,10 @@ fn get_program() -> Result<(Vec<Instruction>, Vec<u8>), String>  {
     }
 }
 
-// Draw the emulator state to the SDL screen.
+/// Draw the emulator state to the SDL screen. Return string on error.
+/// # Arguments
+/// * `emu_state` Raw emulator state to draw.
+/// * `canvas` SDL canvas to draw to.
 fn draw_screen(emu_state: &InterpreterData, canvas: &mut Canvas<Window>) -> Result<(), String> {
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
@@ -673,7 +775,9 @@ fn draw_screen(emu_state: &InterpreterData, canvas: &mut Canvas<Window>) -> Resu
     Ok(())
 }
 
-// Sdl->internal Chip8 format. Returns 0xdeadbeef on error.
+/// Sdl->internal Chip8 format. Returns 0xdeadbeef on error.
+/// # Arguments
+/// * `kc` Raw SDL keycode.
 fn sdl_keycode_to_internal(kc: Keycode) -> u32 {
     match kc {
         Keycode::Num7 => 0x1,
@@ -699,6 +803,7 @@ fn sdl_keycode_to_internal(kc: Keycode) -> u32 {
     }
 }
 
+/// Run the emulation. Return string on error.
 fn main() -> Result<(), String> {
     let (program, raw_program) = get_program()?;
 
