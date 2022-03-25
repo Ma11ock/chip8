@@ -192,10 +192,6 @@ fn get_fourth_nibble(n: u16) -> u8 {
     ((n & 0xf000u16) >> 12) as u8
 }
 
-fn invalid_instruction_message(index: usize, what: u16) -> String {
-    format!("Invalid instruction at position {}: 0x{:x}.", index, what)
-}
-
 fn jp_to_instruction_pos(d: u16) -> u16 {
     (d - 0x200) / 2
 }
@@ -590,7 +586,7 @@ fn convert_program(data: &Vec<u16>) -> Result<Vec<Instruction>, String> {
     // instructions, it also has no way of differentiating sprite/constant
     // data with actual instructions. A design to avoid in the future.
     let mut result: Vec<Instruction> = Vec::with_capacity(data.len());
-    for (pos, i) in data.iter().enumerate() {
+    for i in data.iter() {
         match program_to_enum(*i) {
             Ok(d) => result.push(d),
             // Ignore "invalid instructions", as they could just be sprite data.
@@ -638,7 +634,13 @@ fn get_program() -> Result<(Vec<Instruction>, Vec<u8>), String>  {
     println!("Opening binary file {}.", game_file);
 
     match fs::read(game_file) {
-        Ok(raw_p) => Ok((convert_program(&convert_bin_format(&raw_p)?)?, raw_p)),
+        Ok(mut raw_p) => {
+            // Ensure raw_p is even length.
+            if raw_p.len() % 2 == 1 {
+                raw_p.push(0);
+            }
+            Ok((convert_program(&convert_bin_format(&raw_p)?)?, raw_p))
+        },
         Err(raw_e) => return Err(raw_e.to_string()),
     }
 }
