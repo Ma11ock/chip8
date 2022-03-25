@@ -389,3 +389,6 @@ Cargo.lock
 
 *.bin
 *.rom
+*.c8
+*.chip8
+*.ch8
