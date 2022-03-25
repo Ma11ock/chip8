@@ -3,11 +3,11 @@
 #+EMAIL: <ryan@ryanmj.xyz>
 
 Screenshots:
-#+CAPTION: IBM logo test
+IBM logo test
 [[./ibm.png]]
 
-#+CAPTION: Chip8 instruction test
+Chip8 instruction test
 [[./test.png]]
 
-#+CAPTION: Two player pong game
+Two player pong game
 [[./demo.gif]]
