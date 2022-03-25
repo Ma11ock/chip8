@@ -360,9 +360,11 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
                     let yi = (emu_state.get_register(y) as usize + i) % NUM_ROWS;
                     if sb & (0x80 >> j) != 0 {
                         if emu_state.screen[xj][yi] {
-                                emu_state.set_register(0xf, 1);
+                            emu_state.set_register(0xf, 1);
+                            emu_state.screen[xj][yi] = false;
+                        } else {
+                            emu_state.screen[xj][yi] = true;
                         }
-                        emu_state.screen[xj][yi] = true;
                     }
                 }
             }
@@ -592,11 +594,15 @@ fn program_to_enum(instruction: u16) -> Result<Instruction, InstructionError> {
 }
 
 fn convert_program(data: &Vec<u16>) -> Result<Vec<Instruction>, String> {
+    // HACK this is a bad design. Not only does it mess with JP and CALL
+    // instructions, it also has no way of differentiating sprite/constant
+    // data with actual instructions. A design to avoid in the future.
     let mut result: Vec<Instruction> = Vec::with_capacity(data.len());
     for (pos, i) in data.iter().enumerate() {
         match program_to_enum(*i) {
             Ok(d) => result.push(d),
-            Err(_) => return Err(invalid_instruction_message(pos, *i)),
+            // Ignore "invalid instructions", as they could just be sprite data.
+            _ => {},
         }
     }
     Ok(result)
@@ -730,6 +736,12 @@ fn main() -> Result<(), String> {
         emu_state.mem[i + 0x200] = *b;
     }
 
+    let mut time_passed = Duration::new(0, 0);
+    let mut seconds_counter = Duration::new(0, 0);
+
+    // Draw the blank screen once before beginning the loop.
+    draw_screen(&emu_state, &mut canvas)?;
+
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -752,16 +764,27 @@ fn main() -> Result<(), String> {
 
         emulate(&program, &mut emu_state, &cur_pressed_keys);
 
-        if emu_state.delay_timer > 0 {
-            emu_state.delay_timer -= 1;
+
+        if time_passed > Duration::from_millis(1000 / 60) {
+            time_passed = Duration::new(0, 0);
+            draw_screen(&emu_state, &mut canvas)?;
+            if emu_state.delay_timer > 0 {
+                emu_state.delay_timer -= 1;
+            }
+            if emu_state.sound_timer > 0 {
+                emu_state.sound_timer -= 1;
+            }
         }
-        if emu_state.sound_timer > 0 {
-            emu_state.sound_timer -= 1;
+        if seconds_counter > Duration::new(1, 0) {
+            seconds_counter = Duration::new(0, 0);
+            //emu_state.screen = [[false; NUM_ROWS]; NUM_COLS];
         }
 
-        draw_screen(&emu_state, &mut canvas)?;
-
-        std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
+        // Rate of 700 instructions per second.
+        const SLEEP_FOR: u64 = 1_000_000_000 / 700;
+        std::thread::sleep(Duration::from_nanos(SLEEP_FOR));
+        time_passed += Duration::from_nanos(SLEEP_FOR);
+        seconds_counter += Duration::from_nanos(SLEEP_FOR);
     }
 
     Ok(())
