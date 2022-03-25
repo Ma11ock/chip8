@@ -64,6 +64,8 @@ struct InterpreterData {
     mem: [u8; 4096],
     // The screen.
     screen: [[bool; NUM_ROWS]; NUM_COLS],
+    // Redraw the screen.
+    draw: bool,
     // Rng.
     rng: ThreadRng,
 }
@@ -80,6 +82,7 @@ impl InterpreterData {
             sound_timer: 0,
             mem: [0; 4096],
             screen: [[false; NUM_ROWS]; NUM_COLS],
+            draw: false,
             rng: rand::thread_rng(),
         }
     }
@@ -202,7 +205,6 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
     type I = Instruction;
 
     let instruction = program[emu_state.pc as usize];
-    println!("It is {}", emu_state.pc);
 
     // Check first nibble, store result of match in the program counter.
     emu_state.pc = match instruction {
@@ -260,7 +262,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
         // Adds the bottom byte to the value of V[third nibble], then
         // stores it there.
         I::Add(x, kk) => {
-            emu_state.set_register(x, emu_state.get_register(0) + kk);
+            emu_state.set_register(x, emu_state.get_register(x) + kk);
             emu_state.increment_pc(1)
         },
         I::LdR(x, y) => {
@@ -349,12 +351,9 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
         // Display n-byte sprite starting at memory location I at (Vx, Vy),
         // set VF = collision.
         I::Drw(x, y, n) => {
-            print!("A thing happened! {n} {} at {},{}:", emu_state.i,
-                     emu_state.get_register(x), emu_state.get_register(y));
             emu_state.set_register(0xf, 0);
             for i in 0..(n as usize) {
                 let sb = emu_state.mem[emu_state.i as usize + i];
-                print!(", {}", sb);
                 for j in 0..8 {
                     let xj = (emu_state.get_register(x) as usize + j) % NUM_COLS;
                     let yi = (emu_state.get_register(y) as usize + i) % NUM_ROWS;
@@ -368,7 +367,7 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
                     }
                 }
             }
-            println!("");
+            emu_state.draw = true;
             emu_state.increment_pc(1)
         },
         I::Skp(x) => {
@@ -411,14 +410,10 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
         },
         I::LdBCD(x) => {
             let n = emu_state.get_register(x);
-            let h = (n / 100) % 10;
-            let t = (n / 10) % 10;
-            let u = n % 10;
             let i = emu_state.i as usize;
-            println!("Bcding {n}:{h}{t}{u} to {i}");
-            emu_state.mem[i] = 5 * h;
-            emu_state.mem[i + 1] = 5 * t;
-            emu_state.mem[i + 2] = 5 * u;
+            emu_state.mem[i] = (n / 100) % 10;
+            emu_state.mem[i + 1] = (n / 10) % 10;
+            emu_state.mem[i + 2] = n % 10;
             emu_state.increment_pc(1)
         },
         I::LdIR(x) => {
@@ -429,13 +424,10 @@ fn emulate(program: &Vec<Instruction>, emu_state: &mut InterpreterData,
             emu_state.increment_pc(1)
         },
         I::LdIRM(x) => {
-            print!("Ldirm {}, n: {}", emu_state.i, x);
             for i in 0..=(x as u16) {
                 emu_state.set_register(i as u8,
                                        emu_state.mem[(emu_state.i + i) as usize]);
-                print!(", {}", emu_state.get_register(i as u8));
             }
-            println!("");
             emu_state.increment_pc(1)
         },
     };
@@ -602,7 +594,8 @@ fn convert_program(data: &Vec<u16>) -> Result<Vec<Instruction>, String> {
         match program_to_enum(*i) {
             Ok(d) => result.push(d),
             // Ignore "invalid instructions", as they could just be sprite data.
-            _ => {},
+            // Need to push an instruction to preserve order.
+            _ => result.push(Instruction::Sys(0)),
         }
     }
     Ok(result)
@@ -767,7 +760,10 @@ fn main() -> Result<(), String> {
 
         if time_passed > Duration::from_millis(1000 / 60) {
             time_passed = Duration::new(0, 0);
-            draw_screen(&emu_state, &mut canvas)?;
+            if emu_state.draw {
+                draw_screen(&emu_state, &mut canvas)?;
+                emu_state.draw = false;
+            }
             if emu_state.delay_timer > 0 {
                 emu_state.delay_timer -= 1;
             }
